@@ -40,7 +40,7 @@ export function getCurrentUserId(): string {
 /**
  * Ajout ou modification instantanée d'un événement (0ms de latence)
  */
-export async function saveLocalEvent(event: Omit<EventItem, 'sync_status' | 'updated_at' | 'is_deleted'> & { id?: string }): Promise<EventItem> {
+export async function saveLocalEvent(event: Omit<EventItem, 'sync_status' | 'updated_at' | 'is_deleted' | 'user_id' | 'id'> & { id?: string; user_id?: string }): Promise<EventItem> {
   const now = new Date().toISOString();
   const existing = event.id ? await db.events.get(event.id) : null;
 

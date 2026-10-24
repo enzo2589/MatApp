@@ -185,6 +185,33 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
             <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        {/* Tâches favorites étudiantes réutilisables en 1 tap */}
+        <div className="flex items-center gap-1 overflow-x-auto pt-1.5 scrollbar-none">
+          <span className="text-[9px] font-extrabold uppercase text-indigo-600 shrink-0">Favoris :</span>
+          {[
+            { label: '🧠 Anki 150 cartes', color: '#10B981' },
+            { label: '📖 Fiches EDN', color: '#F59E0B' },
+            { label: '🏥 Carnet stage', color: '#06B6D4' },
+            { label: '📝 QCM annales', color: '#D946EF' },
+            { label: '📚 Polycopié', color: '#4F46E5' },
+          ].map((fav) => (
+            <button
+              key={fav.label}
+              type="button"
+              onClick={() => {
+                saveLocalTask({
+                  title: fav.label,
+                  color: fav.color,
+                  is_completed: false,
+                });
+              }}
+              className="shrink-0 px-2 py-0.5 rounded-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 text-[10px] font-semibold transition-all active:scale-95"
+            >
+              + {fav.label}
+            </button>
+          ))}
+        </div>
       </form>
 
       {/* Liste défilable des tâches */}

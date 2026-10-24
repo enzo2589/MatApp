@@ -9,7 +9,8 @@ import {
   parseISO,
   setHours,
   setMinutes,
-  addMinutes
+  addMinutes,
+  addDays
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
@@ -22,6 +23,7 @@ import {
   Sparkles,
   GripHorizontal,
   MoveVertical,
+  Copy,
   Check
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -362,6 +364,51 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     setQuickInspectEvent(null);
   };
 
+  // Duplication éclair d'un événement
+  const handleDuplicateEvent = async (event: EventItem, daysOffset: number = 1) => {
+    const start = addDays(parseISO(event.start_time), daysOffset);
+    const end = addDays(parseISO(event.end_time), daysOffset);
+
+    const newEvent = {
+      title: `${event.title} (Copie)`,
+      description: event.description || '',
+      color: event.color,
+      alarms: event.alarms || [],
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+    };
+    await saveLocalEvent(newEvent);
+    setQuickInspectEvent(null);
+  };
+
+  // Déplacement tactile rapide (avancer ou reculer de 30 min ou 1h)
+  const handleShiftEventTime = async (event: EventItem, deltaMinutes: number) => {
+    const start = addMinutes(parseISO(event.start_time), deltaMinutes);
+    const end = addMinutes(parseISO(event.end_time), deltaMinutes);
+
+    const updated = {
+      ...event,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+    };
+    await saveLocalEvent(updated);
+    setQuickInspectEvent(updated);
+  };
+
+  // Déplacement d'un jour vers la gauche ou la droite
+  const handleShiftEventDay = async (event: EventItem, daysDelta: number) => {
+    const start = addDays(parseISO(event.start_time), daysDelta);
+    const end = addDays(parseISO(event.end_time), daysDelta);
+
+    const updated = {
+      ...event,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+    };
+    await saveLocalEvent(updated);
+    setQuickInspectEvent(updated);
+  };
+
   // Indicateur de l'heure courante (Ligne rouge live)
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const currentTimeTop = (currentMinutes / 60) * hourHeight;
@@ -695,6 +742,78 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Déplacer l'événement sur l'emploi du temps */}
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Déplacer l’activité sur la grille :
+              </span>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleShiftEventTime(quickInspectEvent, -30)}
+                    className="flex-1 py-1 px-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors active:scale-95"
+                    title="Reculer de 30 min"
+                  >
+                    -30 min
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleShiftEventTime(quickInspectEvent, 30)}
+                    className="flex-1 py-1 px-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors active:scale-95"
+                    title="Avancer de 30 min"
+                  >
+                    +30 min
+                  </button>
+                </div>
+
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleShiftEventDay(quickInspectEvent, -1)}
+                    className="flex-1 py-1 px-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition-colors active:scale-95"
+                    title="Déplacer vers le jour précédent"
+                  >
+                    ← Jour -1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleShiftEventDay(quickInspectEvent, 1)}
+                    className="flex-1 py-1 px-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition-colors active:scale-95"
+                    title="Déplacer vers le jour suivant"
+                  >
+                    Jour +1 →
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Dupliquer l'événement */}
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
+                <Copy className="w-3 h-3 text-indigo-600" />
+                Dupliquer l’activité :
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleDuplicateEvent(quickInspectEvent, 1)}
+                  className="flex-1 py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1 active:scale-95"
+                >
+                  <Copy className="w-3 h-3" />
+                  Demain (+1j)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDuplicateEvent(quickInspectEvent, 7)}
+                  className="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1 active:scale-95"
+                >
+                  <Copy className="w-3 h-3" />
+                  Semaine (+7j)
+                </button>
               </div>
             </div>
 

@@ -51,6 +51,23 @@ export interface AlarmItem {
   triggerTime: Date;
 }
 
+export interface FavoriteItem {
+  id: string;
+  title: string;
+  color: string;
+  durationMinutes: number;
+  description?: string;
+  alarms: number[];
+  emoji?: string;
+  category?: string;
+}
+
+export interface DayHighlight {
+  date: string; // 'YYYY-MM-DD'
+  color: string; // Hex color
+  label: string; // e.g. 'Examen', 'Repos', 'Stage'
+}
+
 export interface SyncEngineStatus {
   isOnline: boolean;
   isSyncing: boolean;
