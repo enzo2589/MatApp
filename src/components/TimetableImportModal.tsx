@@ -26,7 +26,6 @@ import {
   parseTimetableText,
   parseICS,
   importCoursesToDatabase,
-  cleanAllDuplicateAndDemoEvents,
 } from '../services/timetableImporter';
 import { getColorTheme } from '../constants/colors';
 import { alarmService } from '../services/alarmService';
@@ -503,49 +502,31 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
            ========================================================================= */}
         {!isSuccess && (
           <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-200/60 transition-colors"
-              >
-                Annuler
-              </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-200/60 transition-colors"
+            >
+              Annuler
+            </button>
 
-              <button
-                type="button"
-                onClick={async () => {
-                  const cleaned = await cleanAllDuplicateAndDemoEvents();
-                  alarmService.playChime();
-                  alert(cleaned > 0 ? `${cleaned} doublon(s) et élément(s) parasites supprimés !` : 'Votre agenda est déjà parfaitement propre !');
-                }}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors border border-slate-200"
-                title="Supprime tous les doublons et les éléments de démo"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Nettoyer les doublons</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleImport}
-                disabled={selectedCount === 0 || isProcessing}
-                className={clsx(
-                  'px-5 py-2.5 rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2',
-                  selectedCount > 0 && !isProcessing
-                    ? 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-indigo-600/25'
-                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                )}
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>
-                  Tout intégrer dans mon emploi du temps ({selectedCount} cours)
-                </span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleImport}
+              disabled={selectedCount === 0 || isProcessing}
+              className={clsx(
+                'px-5 py-2.5 rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2',
+                selectedCount > 0 && !isProcessing
+                  ? 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-indigo-600/25'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+              )}
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>
+                Tout intégrer dans mon emploi du temps ({selectedCount} cours)
+              </span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         )}
       </motion.div>

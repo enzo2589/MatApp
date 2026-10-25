@@ -12,7 +12,6 @@ import {
   addMonths,
   subMonths,
   addDays,
-  subDays,
   startOfWeek,
   eachDayOfInterval,
 } from 'date-fns';
@@ -23,15 +22,11 @@ import {
   Plus,
   CalendarCheck,
   Calendar as CalendarIcon,
-  GraduationCap,
-  Sparkles,
-  Check
+  GraduationCap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDrag } from '@use-gesture/react';
 import { clsx } from 'clsx';
-import { cleanAllDuplicateAndDemoEvents } from '../../services/timetableImporter';
-import { alarmService } from '../../services/alarmService';
 
 interface CalendarViewProps {
   currentDate?: Date;
@@ -61,24 +56,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
-  const [cleanFeedback, setCleanFeedback] = useState<string | null>(null);
-
-  // Mode 5 jours (Lundi à Vendredi pour les cours de fac) ou 7 jours (Semaine complète)
-  const [weekDaysCount, setWeekDaysCount] = useState<5 | 7>(() => {
-    try {
-      const saved = localStorage.getItem('medagenda_week_days_count');
-      return saved === '7' ? 7 : 5;
-    } catch {
-      return 5;
-    }
-  });
-
-  const handleSetWeekDaysCount = (count: 5 | 7) => {
-    setWeekDaysCount(count);
-    try {
-      localStorage.setItem('medagenda_week_days_count', count.toString());
-    } catch {}
-  };
 
   // Modal d'événement rapide
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -90,34 +67,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     []
   );
 
-  // Calcul des jours affichés selon le mode
+  // Calcul des jours affichés (toujours sur 7 jours exacts : Lundi à Dimanche)
   const displayedDays = useMemo(() => {
-    if (viewMode === 'day') {
-      return [currentDate];
-    }
-    if (viewMode === '3days') {
-      return [currentDate, addDays(currentDate, 1), addDays(currentDate, 2)];
-    }
-    // Vue Semaine (Lundi à Vendredi en mode 5j, ou Lundi à Dimanche en mode 7j)
     const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-    const daysToAdd = weekDaysCount === 5 ? 4 : 6;
     return eachDayOfInterval({
       start: weekStart,
-      end: addDays(weekStart, daysToAdd),
+      end: addDays(weekStart, 6),
     });
-  }, [currentDate, viewMode, weekDaysCount]);
+  }, [currentDate]);
 
   // Actions de navigation
   const handlePrev = () => {
     setSlideDirection('left');
     if (viewMode === 'month') {
       handleUpdateDate(subMonths(currentDate, 1));
-    } else if (viewMode === 'week') {
-      handleUpdateDate(subWeeks(currentDate, 1));
-    } else if (viewMode === '3days') {
-      handleUpdateDate(subDays(currentDate, 3));
     } else {
-      handleUpdateDate(subDays(currentDate, 1));
+      handleUpdateDate(subWeeks(currentDate, 1));
     }
   };
 
@@ -125,12 +90,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     setSlideDirection('right');
     if (viewMode === 'month') {
       handleUpdateDate(addMonths(currentDate, 1));
-    } else if (viewMode === 'week') {
-      handleUpdateDate(addWeeks(currentDate, 1));
-    } else if (viewMode === '3days') {
-      handleUpdateDate(addDays(currentDate, 3));
     } else {
-      handleUpdateDate(addDays(currentDate, 1));
+      handleUpdateDate(addWeeks(currentDate, 1));
     }
   };
 
@@ -222,41 +183,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </h2>
         </div>
 
-        {/* Contrôles de Vue (Semaine / Mois / 3 Jours) + 5j/7j + Boutons d'Action */}
+        {/* Contrôles de Vue (Semaine / Mois) + Boutons d'Action */}
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
-          {/* Sous-sélecteur 5 jours (Lun-Ven) vs 7 jours (Semaine entière) */}
-          {viewMode === 'week' && (
-            <div className="hidden sm:flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
-              <button
-                type="button"
-                onClick={() => handleSetWeekDaysCount(5)}
-                className={clsx(
-                  'px-2 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1',
-                  weekDaysCount === 5
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                )}
-                title="Afficher les 5 jours de cours (Lundi à Vendredi) avec colonnes ultra-larges"
-              >
-                <span>5 Jours</span>
-                <span className="text-[10px] font-semibold opacity-70 hidden md:inline">(Lun-Ven)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetWeekDaysCount(7)}
-                className={clsx(
-                  'px-2 py-1 rounded-lg text-xs font-black transition-all',
-                  weekDaysCount === 7
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                )}
-                title="Afficher la semaine entière avec Samedi et Dimanche"
-              >
-                7 Jours
-              </button>
-            </div>
-          )}
-
           <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
             <button
               type="button"
@@ -283,36 +211,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             >
               Mois
             </button>
-
-            <button
-              type="button"
-              onClick={() => setViewMode('3days')}
-              className={clsx(
-                'hidden md:block px-2.5 py-1 rounded-lg text-xs font-bold transition-all',
-                viewMode === '3days'
-                  ? 'bg-white text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              )}
-            >
-              3 Jours
-            </button>
           </div>
-
-          {/* Bouton Nettoyer les doublons et données d'exemple parasites */}
-          <button
-            type="button"
-            onClick={async () => {
-              const cleaned = await cleanAllDuplicateAndDemoEvents();
-              alarmService.playChime();
-              setCleanFeedback(cleaned > 0 ? `${cleaned} doublon(s) nettoyé(s)` : 'Agenda 100% propre');
-              setTimeout(() => setCleanFeedback(null), 2500);
-            }}
-            className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border border-slate-200/80 rounded-xl transition-all active:scale-95"
-            title="Supprimer les doublons et déchets d'exemple"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>{cleanFeedback || 'Nettoyer'}</span>
-          </button>
 
           {/* Bouton To-Do mobile */}
           {onOpenTodoList && (
