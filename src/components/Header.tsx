@@ -9,7 +9,8 @@ import {
   CheckCircle,
   CalendarCheck,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  GraduationCap
 } from 'lucide-react';
 import { syncEngine } from '../services/syncEngine';
 import { alarmService } from '../services/alarmService';
@@ -19,12 +20,14 @@ import { clsx } from 'clsx';
 interface HeaderProps {
   onOpenSettings: () => void;
   onOpenTodoList: () => void;
+  onOpenImportModal: () => void;
   pendingTasksCount: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenTodoList,
+  onOpenImportModal,
   pendingTasksCount,
 }) => {
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>(syncEngine.getStatus());
@@ -113,6 +116,21 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline">Synchronisé</span>
             </>
           )}
+        </button>
+
+        {/* Bouton d'importation d'emploi du temps médical */}
+        <button
+          type="button"
+          onClick={onOpenImportModal}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 text-indigo-700 border border-indigo-200/90 shadow-2xs active:scale-95 transition-all"
+          title="Importer un planning universitaire (PDF, ADE, PASS Lille)"
+        >
+          <GraduationCap className="w-4 h-4 text-indigo-600 stroke-[2.2]" />
+          <span className="hidden sm:inline">Importer Planning</span>
+          <span className="inline sm:hidden">Planning</span>
+          <span className="hidden md:inline-flex px-1.5 py-0.2 rounded-full bg-indigo-200/60 text-indigo-800 text-[10px]">
+            S43
+          </span>
         </button>
 
         {/* Bouton Permission Notifications */}

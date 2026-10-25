@@ -22,7 +22,8 @@ import {
   ChevronRight,
   Plus,
   CalendarCheck,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  GraduationCap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDrag } from '@use-gesture/react';
@@ -32,6 +33,7 @@ interface CalendarViewProps {
   currentDate?: Date;
   onSelectDate?: (date: Date) => void;
   onOpenTodoList?: () => void;
+  onOpenImportModal?: () => void;
   pendingTasksCount?: number;
 }
 
@@ -39,6 +41,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   currentDate: externalDate,
   onSelectDate: externalOnSelectDate,
   onOpenTodoList,
+  onOpenImportModal,
   pendingTasksCount = 0,
 }) => {
   const [internalDate, setInternalDate] = useState<Date>(new Date());
@@ -254,6 +257,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   {pendingTasksCount}
                 </span>
               )}
+            </button>
+          )}
+
+          {/* Bouton Import Emploi du Temps */}
+          {onOpenImportModal && (
+            <button
+              type="button"
+              onClick={onOpenImportModal}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 active:scale-95 text-xs font-bold rounded-xl border border-indigo-200 transition-all"
+              title="Importer un emploi du temps PDF ou ADE Campus"
+            >
+              <GraduationCap className="w-4 h-4 text-indigo-600" />
+              <span>Importer Planning</span>
             </button>
           )}
 

@@ -9,6 +9,7 @@ import { PersistentTodoList } from './components/TodoList/PersistentTodoList';
 import { MiniMonthPicker } from './components/Calendar/MiniMonthPicker';
 import { CustomImageWidget } from './components/StudentWidget/CustomImageWidget';
 import { SettingsModal } from './components/SettingsModal';
+import { TimetableImportModal } from './components/TimetableImportModal';
 import { AlarmBanner } from './components/AlarmBanner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarCheck, CalendarDays, CheckSquare, Sparkles } from 'lucide-react';
@@ -17,6 +18,7 @@ import { clsx } from 'clsx';
 export function App() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isMobileTodoOpen, setIsMobileTodoOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'calendar' | 'sidebar' | 'todo'>('calendar');
 
@@ -52,6 +54,7 @@ export function App() {
       <Header
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTodoList={() => setIsMobileTodoOpen(true)}
+        onOpenImportModal={() => setIsImportModalOpen(true)}
         pendingTasksCount={pendingTasksCount}
       />
 
@@ -161,6 +164,7 @@ export function App() {
             currentDate={currentDate}
             onSelectDate={setCurrentDate}
             onOpenTodoList={() => setIsMobileTodoOpen(true)}
+            onOpenImportModal={() => setIsImportModalOpen(true)}
             pendingTasksCount={pendingTasksCount}
           />
         </div>
@@ -216,6 +220,16 @@ export function App() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* Modal Import Automatique Emploi du Temps Étudiant */}
+      <TimetableImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={(targetDate) => {
+          setCurrentDate(targetDate);
+          setMobileTab('calendar');
+        }}
       />
     </div>
   );
