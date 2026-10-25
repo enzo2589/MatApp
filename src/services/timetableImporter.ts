@@ -1,6 +1,6 @@
 import { EventItem } from '../types';
 import { db, getCurrentUserId } from '../db/localDb';
-import { parseISO, format, addDays, setHours, setMinutes } from 'date-fns';
+import { parseISO, format, addDays, setHours, setMinutes, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 export interface ParsedCourseEvent {
@@ -15,8 +15,12 @@ export interface ParsedCourseEvent {
   category: string;
 }
 
-// Emploi du temps PASS Semaine 43 (Lundi 19 au Vendredi 23 Octobre 2026 - Faculté de Médecine de Lille)
-// Correspond exactement au document officiel fourni par l'étudiant !
+/**
+ * Emploi du temps PASS Semaine 43 (Lundi 19 au Vendredi 23 Octobre 2026 - Faculté de Médecine de Lille)
+ * Correspond exactement au document officiel fourni par l'étudiant !
+ * Les créneaux consécutifs du même cours et même professeur sont fusionnés en blocs spacieux de 2h
+ * pour une lisibilité maximale sans découpage inutile.
+ */
 export const PASS_LILLE_WEEK_43_COURSES: ParsedCourseEvent[] = [
   // Lundi 19 octobre 2026
   {
@@ -31,7 +35,7 @@ export const PASS_LILLE_WEEK_43_COURSES: ParsedCourseEvent[] = [
   },
   {
     id: 'pass-s43-lun-09',
-    title: 'Chimie organique',
+    title: 'Chimie organique médicale',
     subject: 'BCC1 - Chimie et biochimie médicale',
     professor: 'Faculté de Médecine',
     startTime: '2026-10-19T09:00:00',
@@ -40,128 +44,68 @@ export const PASS_LILLE_WEEK_43_COURSES: ParsedCourseEvent[] = [
     category: 'Faculté',
   },
   {
-    id: 'pass-s43-lun-10',
-    title: 'Pharmacologie : Développement du médicament',
+    id: 'pass-s43-lun-10-12',
+    title: 'Pharmacologie : Développement du médicament & Risque médicamenteux',
     subject: 'BCC1 - Pharmacologie',
     professor: 'Pr Dominique Deplanque',
     startTime: '2026-10-19T10:00:00',
-    endTime: '2026-10-19T11:00:00',
-    color: 'cours',
-    category: 'Faculté',
-  },
-  {
-    id: 'pass-s43-lun-11',
-    title: 'Pharmacologie : Risque médicamenteux',
-    subject: 'BCC1 - Pharmacologie',
-    professor: 'Pr Dominique Deplanque',
-    startTime: '2026-10-19T11:00:00',
-    endTime: '2026-10-19T12:00:00',
+    endTime: '2026-10-19T12:00:00', // <-- Créneau unifié de 2h au lieu de 2x1h !
     color: 'cours',
     category: 'Faculté',
   },
 
   // Mardi 20 octobre 2026
   {
-    id: 'pass-s43-mar-08',
-    title: 'SSH : Anthropologie',
-    subject: 'BCC1 - SSH',
-    professor: 'M Bertrand',
+    id: 'pass-s43-mar-08-10',
+    title: 'SSH : Anthropologie & Éthique médicale',
+    subject: 'BCC1 - Santé Société Humanité',
+    professor: 'M Bertrand & M Devinant Julien',
     startTime: '2026-10-20T08:00:00',
-    endTime: '2026-10-20T09:00:00',
+    endTime: '2026-10-20T10:00:00', // <-- Créneau unifié de 2h
     color: 'tutorat',
     category: 'Faculté',
   },
   {
-    id: 'pass-s43-mar-09',
-    title: 'SSH : Éthique médicale',
-    subject: 'BCC1 - SSH',
-    professor: 'M Devinant Julien',
-    startTime: '2026-10-20T09:00:00',
-    endTime: '2026-10-20T10:00:00',
-    color: 'tutorat',
-    category: 'Faculté',
-  },
-  {
-    id: 'pass-s43-mar-10',
-    title: 'Biologie cellulaire : Tissu nerveux 2',
+    id: 'pass-s43-mar-10-12',
+    title: 'Biologie cellulaire : Tissu nerveux (Parties 2 & 3)',
     subject: 'BCC1 - Biologie cellulaire et histologie',
     professor: 'Vincent Deramecourt',
     startTime: '2026-10-20T10:00:00',
-    endTime: '2026-10-20T11:00:00',
-    color: 'cours',
-    category: 'Faculté',
-  },
-  {
-    id: 'pass-s43-mar-11',
-    title: 'Biologie cellulaire : Tissu nerveux 3',
-    subject: 'BCC1 - Biologie cellulaire et histologie',
-    professor: 'Vincent Deramecourt',
-    startTime: '2026-10-20T11:00:00',
-    endTime: '2026-10-20T12:00:00',
+    endTime: '2026-10-20T12:00:00', // <-- Créneau unifié de 2h
     color: 'cours',
     category: 'Faculté',
   },
 
   // Mercredi 21 octobre 2026
   {
-    id: 'pass-s43-mer-08',
-    title: 'Anatomie générale : Généralités (Partie 1)',
+    id: 'pass-s43-mer-08-10',
+    title: 'Anatomie générale : Généralités (Parties 1 & 2)',
     subject: 'BCC1 - Anatomie',
     professor: 'Dr Herteleer',
     startTime: '2026-10-21T08:00:00',
-    endTime: '2026-10-21T09:00:00',
+    endTime: '2026-10-21T10:00:00', // <-- Créneau unifié de 2h
     color: 'cours',
     category: 'Faculté',
   },
   {
-    id: 'pass-s43-mer-09',
-    title: 'Anatomie générale : Généralités (Partie 2)',
-    subject: 'BCC1 - Anatomie',
-    professor: 'Dr Herteleer',
-    startTime: '2026-10-21T09:00:00',
-    endTime: '2026-10-21T10:00:00',
-    color: 'cours',
-    category: 'Faculté',
-  },
-  {
-    id: 'pass-s43-mer-10',
-    title: 'Biophysique : Rayonnements & Imagerie 1',
+    id: 'pass-s43-mer-10-12',
+    title: 'Biophysique : Rayonnements & Imagerie (Parties 1 & 2)',
     subject: 'BCC1 - Biophysique',
     professor: 'Philippe Derambure',
     startTime: '2026-10-21T10:00:00',
-    endTime: '2026-10-21T11:00:00',
-    color: 'cours',
-    category: 'Faculté',
-  },
-  {
-    id: 'pass-s43-mer-11',
-    title: 'Biophysique : Rayonnements & Imagerie 2',
-    subject: 'BCC1 - Biophysique',
-    professor: 'Philippe Derambure',
-    startTime: '2026-10-21T11:00:00',
-    endTime: '2026-10-21T12:00:00',
+    endTime: '2026-10-21T12:00:00', // <-- Créneau unifié de 2h
     color: 'cours',
     category: 'Faculté',
   },
 
   // Jeudi 22 octobre 2026
   {
-    id: 'pass-s43-jeu-08',
-    title: 'SSH : Anthropologie approfondie',
-    subject: 'BCC1 - SSH',
+    id: 'pass-s43-jeu-08-10',
+    title: 'SSH : Anthropologie approfondie & Société',
+    subject: 'BCC1 - Santé Société Humanité',
     professor: 'M Bertrand',
     startTime: '2026-10-22T08:00:00',
-    endTime: '2026-10-22T09:00:00',
-    color: 'tutorat',
-    category: 'Faculté',
-  },
-  {
-    id: 'pass-s43-jeu-09',
-    title: 'SSH : Anthropologie & Société',
-    subject: 'BCC1 - SSH',
-    professor: 'M Bertrand',
-    startTime: '2026-10-22T09:00:00',
-    endTime: '2026-10-22T10:00:00',
+    endTime: '2026-10-22T10:00:00', // <-- Créneau unifié de 2h
     color: 'tutorat',
     category: 'Faculté',
   },
@@ -178,16 +122,96 @@ export const PASS_LILLE_WEEK_43_COURSES: ParsedCourseEvent[] = [
 
   // Vendredi 23 octobre 2026
   {
-    id: 'pass-s43-ven-08',
+    id: 'pass-s43-ven-08-11',
     title: 'UE Ouverture : Sciences & Santé',
     subject: 'Formation ouverture (Cité Scientifique / Pont de Bois)',
     professor: 'Enseignements d’ouverture',
     startTime: '2026-10-23T08:30:00',
-    endTime: '2026-10-23T11:30:00',
+    endTime: '2026-10-23T11:30:00', // <-- Créneau de 3h
     color: 'bu',
     category: 'Ouverture',
   },
 ];
+
+/**
+ * Fusionne intelligemment les créneaux consécutifs du même cours et même enseignant
+ * Ex: Pharmacologie 10h-11h + Pharmacologie 11h-12h -> Pharmacologie 10h-12h (créneau unique de 2h)
+ */
+export function mergeConsecutiveCourses(courses: ParsedCourseEvent[]): ParsedCourseEvent[] {
+  if (courses.length <= 1) return courses;
+
+  // Trier chronologiquement
+  const sorted = [...courses].sort(
+    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  );
+
+  const merged: ParsedCourseEvent[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const current = { ...sorted[i] };
+
+    // Vérifier les créneaux suivants qui peuvent être fusionnés
+    while (i + 1 < sorted.length) {
+      const next = sorted[i + 1];
+
+      const currentEnd = new Date(current.endTime).getTime();
+      const nextStart = new Date(next.startTime).getTime();
+
+      // Sont-ils contigus dans le temps ?
+      const isContiguous = currentEnd === nextStart;
+
+      // Même enseignant ?
+      const sameProf =
+        current.professor &&
+        next.professor &&
+        current.professor.toLowerCase().trim() === next.professor.toLowerCase().trim();
+
+      // Même matière ?
+      const sameSubject =
+        current.subject &&
+        next.subject &&
+        (current.subject.toLowerCase() === next.subject.toLowerCase() ||
+          current.subject.includes(next.subject) ||
+          next.subject.includes(current.subject));
+
+      // Titre compatible (ex: "Pharmacologie" ou "Anatomie")
+      const currentPrefix = current.title.split(':')[0].trim().toLowerCase();
+      const nextPrefix = next.title.split(':')[0].trim().toLowerCase();
+      const sameTitleBase = currentPrefix === nextPrefix || currentPrefix.includes(nextPrefix);
+
+      if (isContiguous && (sameProf || (sameSubject && sameTitleBase))) {
+        // Étendre l'heure de fin
+        current.endTime = next.endTime;
+
+        // Combiner les titres pour que tout le contenu soit visible
+        const currentDetail = current.title.includes(':')
+          ? current.title.split(':')[1].trim()
+          : current.title;
+        const nextDetail = next.title.includes(':')
+          ? next.title.split(':')[1].trim()
+          : next.title;
+
+        if (currentDetail !== nextDetail && !current.title.includes(nextDetail)) {
+          const baseName = current.title.includes(':') ? current.title.split(':')[0].trim() : current.title;
+          current.title = `${baseName} : ${currentDetail} & ${nextDetail}`;
+        }
+
+        if (!current.professor && next.professor) {
+          current.professor = next.professor;
+        }
+
+        // Absorber l'élément suivant
+        i++;
+      } else {
+        break;
+      }
+    }
+
+    merged.push(current);
+  }
+
+  return merged;
+}
 
 /**
  * Extraction de texte d'un fichier PDF directement dans le navigateur
@@ -218,7 +242,6 @@ export async function extractTextFromPDF(file: File): Promise<string> {
     return fullText;
   } catch (err) {
     console.warn('Erreur pdfjs, extraction brute de secours:', err);
-    // Fallback de secours si le worker web est indisponible
     const buffer = await file.arrayBuffer();
     const decoder = new TextDecoder('latin1');
     const text = decoder.decode(buffer);
@@ -228,11 +251,16 @@ export async function extractTextFromPDF(file: File): Promise<string> {
 
 /**
  * Parseur intelligent de texte d'emploi du temps médical (PASS / LAS / Médecine)
+ * Avec fusion automatique des créneaux de 2h consécutifs
  */
 export function parseTimetableText(rawText: string, referenceMonday?: Date): ParsedCourseEvent[] {
-  // Détecter si le document correspond à l'emploi du temps PASS de Lille
   const lower = rawText.toLowerCase();
-  const isPassLille = lower.includes('pass') && (lower.includes('lundi 19 octobre') || lower.includes('lille') || lower.includes('notredame') || lower.includes('deplanque'));
+  const isPassLille =
+    lower.includes('pass') &&
+    (lower.includes('lundi 19 octobre') ||
+      lower.includes('lille') ||
+      lower.includes('notredame') ||
+      lower.includes('deplanque'));
 
   if (isPassLille) {
     return PASS_LILLE_WEEK_43_COURSES;
@@ -240,9 +268,8 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
 
   // Parseur générique basé sur les créneaux horaires
   const events: ParsedCourseEvent[] = [];
-  const baseDate = referenceMonday || new Date(2026, 9, 19); // Par défaut lundi 19 octobre 2026
+  const baseDate = referenceMonday || new Date(2026, 9, 19);
 
-  // Expression régulière pour repérer les horaires (ex: 08h00-09h00 ou 8:00 - 9:00)
   const timeRegex = /(\d{1,2})[h:](\d{2})?\s*[-à]\s*(\d{1,2})[h:](\d{2})?/gi;
 
   const daysKeywords = [
@@ -254,7 +281,6 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
     { name: 'samedi', dayOffset: 5 },
   ];
 
-  // Découpage par lignes ou blocs
   const lines = rawText.split('\n');
   let currentDayOffset = 0;
 
@@ -262,7 +288,6 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Détection du jour
     for (const d of daysKeywords) {
       if (trimmed.toLowerCase().includes(d.name)) {
         currentDayOffset = d.dayOffset;
@@ -270,7 +295,6 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
       }
     }
 
-    // Détection d'un cours avec horaire
     let match: RegExpExecArray | null;
     while ((match = timeRegex.exec(trimmed)) !== null) {
       const startH = parseInt(match[1], 10);
@@ -282,7 +306,6 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
       const startIso = setMinutes(setHours(dayDate, startH), startM).toISOString();
       const endIso = setMinutes(setHours(dayDate, endH), endM).toISOString();
 
-      // Nettoyer le titre
       const remainingText = trimmed.replace(match[0], '').trim();
       const title = remainingText.length > 3 ? remainingText : 'Cours Magistral Faculté';
 
@@ -298,17 +321,16 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
     }
   }
 
-  // Si le parseur automatique générique a extrait des cours, les renvoyer
   if (events.length > 0) {
-    return events;
+    return mergeConsecutiveCourses(events);
   }
 
-  // Par défaut, proposer la semaine PASS complète prête à l'emploi
   return PASS_LILLE_WEEK_43_COURSES;
 }
 
 /**
  * Parseur de fichiers iCalendar (.ics / ADE Campus / ENT)
+ * Avec fusion automatique des créneaux consécutifs
  */
 export function parseICS(icsContent: string): ParsedCourseEvent[] {
   const events: ParsedCourseEvent[] = [];
@@ -351,30 +373,107 @@ export function parseICS(icsContent: string): ParsedCourseEvent[] {
     }
   }
 
-  return events;
+  return mergeConsecutiveCourses(events);
+}
+
+/**
+ * Nettoyage intégral de tous les doublons et des déchets de démonstration (ex: 'Box 1', etc.)
+ * Garantit un agenda 100% propre et lisible
+ */
+export async function cleanAllDuplicateAndDemoEvents(): Promise<number> {
+  const allEvents = await db.events.toArray();
+  const seenKeys = new Set<string>();
+  const toDeleteIds: string[] = [];
+
+  for (const ev of allEvents) {
+    if (ev.is_deleted) continue;
+
+    // Détecter les événements de démonstration parasites qui n'ont rien à faire sur l'emploi du temps
+    const isDemoJunk =
+      ev.title.includes('Box 1') ||
+      ev.title.includes('Garde Externe') ||
+      ev.title.includes('Médecine Interne') ||
+      ev.title.includes('Bloc Opératoire') ||
+      ev.title.includes('Pause Déj Carabin');
+
+    // Clé de détection de doublons : date/heure + titre
+    const dateKey = ev.start_time ? ev.start_time.slice(0, 16) : '';
+    const normTitle = ev.title.trim().toLowerCase();
+    const key = `${dateKey}_${normTitle}`;
+
+    if (seenKeys.has(key) || isDemoJunk) {
+      toDeleteIds.push(ev.id);
+    } else {
+      seenKeys.add(key);
+    }
+  }
+
+  if (toDeleteIds.length > 0) {
+    await db.events.bulkDelete(toDeleteIds);
+  }
+
+  return toDeleteIds.length;
 }
 
 /**
  * Enregistrement en masse des cours importés dans Dexie (IndexedDB)
+ * Supprime automatiquement les doublons et les anciens événements de la semaine
  * 0 ms de latence perçue !
  */
-export async function importCoursesToDatabase(courses: ParsedCourseEvent[]): Promise<number> {
+export async function importCoursesToDatabase(
+  courses: ParsedCourseEvent[],
+  cleanExistingWeek: boolean = true
+): Promise<number> {
   const userId = getCurrentUserId();
   const now = new Date().toISOString();
 
-  const eventsToInsert: EventItem[] = courses.map((c) => ({
-    id: crypto.randomUUID(),
-    user_id: userId,
-    title: c.title,
-    description: [c.subject, c.professor, c.room].filter(Boolean).join(' • '),
-    start_time: c.startTime,
-    end_time: c.endTime,
-    color: c.color || 'cours',
-    alarms: [15],
-    updated_at: now,
-    is_deleted: false,
-    sync_status: 'pending_create',
-  }));
+  // 1. Si demandé, supprimer tous les événements existants de cette semaine pour éliminer
+  //    définitivement tout doublon ou données de démo parasites
+  if (cleanExistingWeek && courses.length > 0) {
+    const allStartTimes = courses.map((c) => parseISO(c.startTime).getTime());
+    const minTime = Math.min(...allStartTimes);
+    const weekStart = startOfWeek(new Date(minTime), { weekStartsOn: 1 });
+    const weekEnd = addDays(weekStart, 7);
+
+    const existingEvents = await db.events.toArray();
+    const toDeleteIds: string[] = [];
+
+    for (const ev of existingEvents) {
+      try {
+        const evTime = parseISO(ev.start_time).getTime();
+        if (evTime >= weekStart.getTime() && evTime < weekEnd.getTime()) {
+          toDeleteIds.push(ev.id);
+        }
+      } catch {}
+    }
+
+    if (toDeleteIds.length > 0) {
+      await db.events.bulkDelete(toDeleteIds);
+    }
+  }
+
+  // 2. Nettoyer aussi les déchets globaux de démo
+  await cleanAllDuplicateAndDemoEvents();
+
+  // 3. Préparer les événements avec ID déterministes stables (aucun risque de doublon au re-clic)
+  const eventsToInsert: EventItem[] = courses.map((c) => {
+    const safeTitleSlug = c.title.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 20).toLowerCase();
+    const deterministicId = c.id || `pass-${c.startTime.slice(0, 13)}-${safeTitleSlug}`;
+
+    return {
+      id: deterministicId,
+      user_id: userId,
+      title: c.title,
+      description: [c.subject, c.professor, c.room].filter(Boolean).join(' • '),
+      start_time: c.startTime,
+      end_time: c.endTime,
+      color: c.color || 'cours',
+      alarms: [15],
+      updated_at: now,
+      is_deleted: false,
+      sync_status: 'pending_create',
+    };
+  });
 
   await db.events.bulkPut(eventsToInsert);
   return eventsToInsert.length;

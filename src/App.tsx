@@ -10,6 +10,7 @@ import { MiniMonthPicker } from './components/Calendar/MiniMonthPicker';
 import { CustomImageWidget } from './components/StudentWidget/CustomImageWidget';
 import { SettingsModal } from './components/SettingsModal';
 import { TimetableImportModal } from './components/TimetableImportModal';
+import { cleanAllDuplicateAndDemoEvents } from './services/timetableImporter';
 import { AlarmBanner } from './components/AlarmBanner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarCheck, CalendarDays, CheckSquare, Sparkles } from 'lucide-react';
@@ -25,6 +26,7 @@ export function App() {
   // Initialisation au premier chargement
   useEffect(() => {
     seedInitialMedicalDataIfEmpty();
+    cleanAllDuplicateAndDemoEvents();
     syncEngine.init();
     alarmService.startAlarmLoop();
 

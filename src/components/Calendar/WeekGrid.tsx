@@ -24,7 +24,8 @@ import {
   GripHorizontal,
   MoveVertical,
   Copy,
-  Check
+  Check,
+  User
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -49,9 +50,9 @@ interface LayoutEvent {
 
 // Hauteurs de ligne par défaut pour le zoom tactile iPad
 const ZOOM_LEVELS = [
-  { label: 'Compact', height: 56 },
-  { label: 'Normal', height: 72 },
-  { label: 'Grand (Pencil)', height: 94 },
+  { label: 'Normal (90px)', height: 90 },
+  { label: 'Grand (115px)', height: 115 },
+  { label: 'Pencil iPad (145px)', height: 145 },
 ];
 
 export const WeekGrid: React.FC<WeekGridProps> = ({
@@ -63,20 +64,20 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const now = new Date();
 
-  // Niveau de zoom / hauteur d'heure réglable tactilement
+  // Niveau de zoom / hauteur d'heure réglable tactilement (par défaut grand et aéré : 115px)
   const [hourHeight, setHourHeight] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem('medagenda_hour_height');
-      return saved ? parseInt(saved, 10) : 72;
+      const saved = localStorage.getItem('medagenda_hour_height_v2');
+      return saved ? parseInt(saved, 10) : 115;
     } catch {
-      return 72;
+      return 115;
     }
   });
 
   const handleSetHourHeight = (h: number) => {
     setHourHeight(h);
     try {
-      localStorage.setItem('medagenda_hour_height', h.toString());
+      localStorage.setItem('medagenda_hour_height_v2', h.toString());
     } catch {}
   };
 
@@ -469,15 +470,20 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
         ref={containerRef}
         className="flex-1 overflow-y-auto overflow-x-hidden relative flex divide-x divide-slate-100 touch-pan-y"
       >
-        {/* Colonne latérale des heures (1h, 2h... comme sur le croquis) */}
-        <div className="w-14 sm:w-16 shrink-0 bg-slate-50/50 border-r border-slate-200/80 select-none">
+        {/* Colonne latérale des heures (avec repères :00 et :30 bien lisibles) */}
+        <div className="w-16 sm:w-20 shrink-0 bg-slate-50/80 border-r border-slate-200/90 select-none">
           {Array.from({ length: TOTAL_HOURS }).map((_, hour) => (
             <div
               key={hour}
               style={{ height: hourHeight }}
-              className="relative text-right pr-2 text-xs font-bold text-slate-400 border-b border-slate-100"
+              className="relative text-right pr-2.5 font-bold border-b border-slate-100 flex flex-col justify-between py-1"
             >
-              <span className="-top-2.5 relative">{hour}h</span>
+              <span className="text-xs sm:text-sm font-extrabold text-slate-700 tracking-tight">
+                {hour.toString().padStart(2, '0')}:00
+              </span>
+              <span className="text-[10px] font-semibold text-slate-400">
+                {hour.toString().padStart(2, '0')}:30
+              </span>
             </div>
           ))}
         </div>
@@ -556,6 +562,11 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                   const durationMins = differenceInMinutes(parseISO(event.end_time), parseISO(event.start_time));
                   const isInspected = quickInspectEvent?.id === event.id;
 
+                  // Extraire la matière et le professeur de la description
+                  const descParts = event.description ? event.description.split('•').map((s) => s.trim()) : [];
+                  const subjectLabel = descParts[0] || '';
+                  const professorOrRoom = descParts.slice(1).join(' • ');
+
                   return (
                     <div
                       key={event.id}
@@ -572,43 +583,63 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                         borderLeftColor: theme.borderAccent,
                       }}
                       className={clsx(
-                        'event-card absolute z-10 rounded-xl p-2 shadow-xs border-l-4 transition-all duration-100',
-                        'hover:shadow-md hover:scale-[1.01] hover:z-20 cursor-pointer overflow-hidden flex flex-col justify-between select-none',
+                        'event-card absolute z-10 rounded-2xl p-2.5 sm:p-3 shadow-xs border-l-[5px] border-t border-r border-b border-black/5 transition-all duration-150',
+                        'hover:shadow-lg hover:scale-[1.01] hover:z-20 cursor-pointer overflow-hidden flex flex-col justify-between select-none',
                         isInspected && 'ring-2 ring-indigo-500 shadow-apple-lg z-30'
                       )}
                     >
                       {/* Corps supérieur de l'événement */}
-                      <div className="min-w-0 pointer-events-none">
-                        <div className="flex items-center justify-between gap-1">
-                          <h4
-                            className="text-xs font-extrabold truncate leading-tight tracking-tight flex items-center gap-1"
-                            style={{ color: theme.textColor }}
-                          >
-                            <span>{theme.emoji || '📌'}</span>
-                            <span className="truncate">{event.title}</span>
-                          </h4>
-
-                          {event.alarms && event.alarms.length > 0 && (
-                            <Bell className="w-3 h-3 text-red-500 shrink-0" />
+                      <div className="min-w-0 pointer-events-none space-y-1">
+                        {/* En-tête : Badge matière & Alarme */}
+                        <div className="flex items-center justify-between gap-1 flex-wrap">
+                          {subjectLabel && height >= 50 && (
+                            <span
+                              className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md truncate max-w-[170px]"
+                              style={{
+                                backgroundColor: theme.badgeBg,
+                                color: theme.textColor,
+                              }}
+                            >
+                              {subjectLabel}
+                            </span>
                           )}
+
+                          <div className="flex items-center gap-1 ml-auto">
+                            {event.alarms && event.alarms.length > 0 && (
+                              <Bell className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                            )}
+                          </div>
                         </div>
 
-                        {height >= 38 && (
-                          <p className="text-[10px] font-bold text-slate-600 truncate mt-0.5 flex items-center gap-1">
-                            <Clock className="w-2.5 h-2.5 text-slate-400" />
+                        {/* Titre principal grand et ultra-lisible */}
+                        <h4
+                          className="text-xs sm:text-sm font-black tracking-tight leading-snug line-clamp-2 sm:line-clamp-3 text-slate-900"
+                          style={{ color: theme.textColor }}
+                        >
+                          {event.title}
+                        </h4>
+
+                        {/* Horaire et durée */}
+                        {height >= 40 && (
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-white/70 px-2 py-0.5 rounded-md w-fit shadow-2xs">
+                            <Clock className="w-3 h-3 text-slate-500 shrink-0" />
                             <span>
                               {format(parseISO(event.start_time), 'HH:mm')} - {format(parseISO(event.end_time), 'HH:mm')}
                             </span>
-                            <span className="opacity-60 text-[9px]">({durationMins}m)</span>
+                            <span className="opacity-70 text-[10px] font-semibold">
+                              ({durationMins >= 60 ? `${Math.floor(durationMins / 60)}h${durationMins % 60 ? durationMins % 60 : ''}` : `${durationMins}m`})
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Enseignant / Salle */}
+                        {height >= 85 && professorOrRoom && (
+                          <p className="text-[11px] font-semibold text-slate-600 truncate flex items-center gap-1 mt-1">
+                            <User className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{professorOrRoom}</span>
                           </p>
                         )}
                       </div>
-
-                      {height >= 75 && event.description && (
-                        <p className="text-[10px] text-slate-500 line-clamp-2 mt-1 leading-snug font-medium pointer-events-none">
-                          {event.description}
-                        </p>
-                      )}
 
                       {/* POIGNÉE DE REDIMENSIONNEMENT TACTILE IPAD (RESIZE HANDLE EN BAS) */}
                       <div
@@ -633,20 +664,20 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       <div className="absolute bottom-4 left-4 z-40 bg-white/90 backdrop-blur-md rounded-2xl shadow-apple border border-slate-200/80 p-1 flex items-center gap-1">
         <button
           type="button"
-          onClick={() => handleSetHourHeight(Math.max(50, hourHeight - 12))}
+          onClick={() => handleSetHourHeight(Math.max(65, hourHeight - 15))}
           className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors active:scale-95"
           title="Zoom arrière (vue dense)"
         >
           <Minus className="w-3.5 h-3.5" />
         </button>
 
-        <span className="text-[10px] font-extrabold text-slate-600 px-1.5 uppercase tracking-wider">
-          {hourHeight <= 58 ? 'Compact' : hourHeight >= 85 ? 'Pencil' : 'Normal'}
+        <span className="text-[10px] font-extrabold text-slate-600 px-2 uppercase tracking-wider">
+          {hourHeight <= 80 ? 'Compact' : hourHeight >= 130 ? 'Pencil iPad' : 'Grand'}
         </span>
 
         <button
           type="button"
-          onClick={() => handleSetHourHeight(Math.min(100, hourHeight + 12))}
+          onClick={() => handleSetHourHeight(Math.min(180, hourHeight + 15))}
           className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors active:scale-95"
           title="Zoom avant (confort Apple Pencil)"
         >

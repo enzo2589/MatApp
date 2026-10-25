@@ -26,6 +26,7 @@ import {
   parseTimetableText,
   parseICS,
   importCoursesToDatabase,
+  cleanAllDuplicateAndDemoEvents,
 } from '../services/timetableImporter';
 import { getColorTheme } from '../constants/colors';
 import { alarmService } from '../services/alarmService';
@@ -307,7 +308,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                     </h4>
 
                     <p className="text-xs text-indigo-100 max-w-xl font-medium leading-relaxed">
-                      16 cours programmés : <strong>Anatomie</strong> (Dr Herteleer), <strong>Pharmacologie</strong> (Pr Deplanque), <strong>Biologie Cellulaire</strong> (Vincent Deramecourt), <strong>SSH</strong> (M Bertrand & Devinant), <strong>Biophysique</strong> et <strong>Chimie Organique</strong>.
+                      <strong>10 cours unifiés</strong> (créneaux de 2h continus pour une lisibilité maximale) : <strong>Pharmacologie</strong> (Pr Deplanque, 10h-12h), <strong>Biologie Cellulaire</strong> (Vincent Deramecourt, 10h-12h), <strong>Anatomie</strong> (Dr Herteleer, 08h-10h), <strong>Biophysique</strong> (Philippe Derambure, 10h-12h), <strong>SSH</strong> (M Bertrand & Devinant, 08h-10h).
                     </p>
                   </div>
 
@@ -502,13 +503,29 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
            ========================================================================= */}
         {!isSuccess && (
           <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-200/60 transition-colors"
-            >
-              Annuler
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-200/60 transition-colors"
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const cleaned = await cleanAllDuplicateAndDemoEvents();
+                  alarmService.playChime();
+                  alert(cleaned > 0 ? `${cleaned} doublon(s) et élément(s) parasites supprimés !` : 'Votre agenda est déjà parfaitement propre !');
+                }}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors border border-slate-200"
+                title="Supprime tous les doublons et les éléments de démo"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Nettoyer les doublons</span>
+              </button>
+            </div>
 
             <div className="flex items-center gap-2">
               <button
