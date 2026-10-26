@@ -27,7 +27,7 @@ import {
 } from '../services/supabaseClient';
 import { syncEngine } from '../services/syncEngine';
 import { alarmService } from '../services/alarmService';
-import { db, seedInitialMedicalDataIfEmpty } from '../db/localDb';
+import { db, seedInitialMedicalDataIfEmpty, LOCAL_USER_ID } from '../db/localDb';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -55,7 +55,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     if (isOpen) {
       const config = getSupabaseConfig();
       setUrl(config.url || 'https://yxrjexsqscacqekpgstj.supabase.co');
-      setAnonKey(config.anonKey);
+      setAnonKey(config.anonKey || 'sb_publishable_K_o24ab29tAAugZC8DsK-A_QflfUq8T');
 
       getAuthUser().then((user) => {
         setCurrentUserEmail(user?.email || null);
@@ -100,9 +100,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         setAuthSuccess('Connexion réussie !');
         setCurrentUserEmail(res.user?.email || email);
         if (res.user?.id) {
-          localStorage.setItem('medagenda_current_user', JSON.stringify({ id: res.user.id, email: res.user.email }));
+          const newUserId = res.user.id;
+          localStorage.setItem('medagenda_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
+
+          // Migrer tous les événements et tâches locaux vers ce compte Supabase
+          await db.events.where('user_id').equals(LOCAL_USER_ID).modify({
+            user_id: newUserId,
+            sync_status: 'pending_create',
+          });
+          await db.tasks.where('user_id').equals(LOCAL_USER_ID).modify({
+            user_id: newUserId,
+            sync_status: 'pending_create',
+          });
+
+          syncEngine.setupRealtimeSubscription();
+          syncEngine.triggerSync();
         }
-        syncEngine.triggerSync();
       }
     } else {
       const res = await signUpWithEmail(email, password);
@@ -111,7 +124,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       } else {
         setAuthSuccess('Compte créé ! Vérifiez vos emails si la confirmation est requise.');
         if (res.user?.id) {
-          localStorage.setItem('medagenda_current_user', JSON.stringify({ id: res.user.id, email: res.user.email }));
+          const newUserId = res.user.id;
+          localStorage.setItem('medagenda_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
+
+          await db.events.where('user_id').equals(LOCAL_USER_ID).modify({
+            user_id: newUserId,
+            sync_status: 'pending_create',
+          });
+          await db.tasks.where('user_id').equals(LOCAL_USER_ID).modify({
+            user_id: newUserId,
+            sync_status: 'pending_create',
+          });
+
+          syncEngine.setupRealtimeSubscription();
+          syncEngine.triggerSync();
         }
       }
     }

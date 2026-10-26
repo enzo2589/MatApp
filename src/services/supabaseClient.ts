@@ -12,7 +12,7 @@ export function getSupabaseConfig(): { url: string; anonKey: string; isConfigure
   const customKey = localStorage.getItem(STORAGE_SUPABASE_KEY) || '';
 
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://yxrjexsqscacqekpgstj.supabase.co';
-  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'sb_publishable_K_o24ab29tAAugZC8DsK-A_QflfUq8T';
 
   const url = customUrl || envUrl;
   const anonKey = customKey || envKey;
