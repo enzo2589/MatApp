@@ -161,12 +161,12 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </button>
 
-        {/* Bouton Paramètres & Supabase */}
+        {/* Bouton Paramètres & Compte */}
         <button
           type="button"
           onClick={onOpenSettings}
           className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
-          title="Paramètres, Supabase & Comptes"
+          title="Paramètres & Compte"
         >
           <Settings className="w-5 h-5" />
         </button>

@@ -7,19 +7,17 @@ import {
   Mail,
   User,
   LogOut,
-  Bell,
   Volume2,
   Download,
-  Upload,
   RotateCcw,
   Check,
-  AlertCircle
+  AlertCircle,
+  RefreshCw,
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
-  getSupabaseConfig,
-  saveSupabaseConfig,
-  clearSupabaseConfig,
   signInWithEmail,
   signUpWithEmail,
   signOutUser,
@@ -35,9 +33,7 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-  const [url, setUrl] = useState('');
-  const [anonKey, setAnonKey] = useState('');
-  const [activeTab, setActiveTab] = useState<'cloud' | 'auth' | 'backup'>('cloud');
+  const [activeTab, setActiveTab] = useState<'auth' | 'backup'>('auth');
 
   // Auth states
   const [email, setEmail] = useState('');
@@ -46,6 +42,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [isSyncingManual, setIsSyncingManual] = useState(false);
 
   // Stats
   const [eventCount, setEventCount] = useState(0);
@@ -53,10 +50,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   useEffect(() => {
     if (isOpen) {
-      const config = getSupabaseConfig();
-      setUrl(config.url || 'https://yxrjexsqscacqekpgstj.supabase.co');
-      setAnonKey(config.anonKey || 'sb_publishable_K_o24ab29tAAugZC8DsK-A_QflfUq8T');
-
       getAuthUser().then((user) => {
         setCurrentUserEmail(user?.email || null);
       });
@@ -65,22 +58,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       db.tasks.count().then(setTaskCount);
     }
   }, [isOpen]);
-
-  const handleSaveConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveSupabaseConfig(url, anonKey);
-    syncEngine.setupRealtimeSubscription();
-    syncEngine.triggerSync();
-    alert('Configuration Supabase enregistrée !');
-  };
-
-  const handleClearConfig = () => {
-    if (window.confirm('Réinitialiser la configuration Supabase ? L’application continuera en mode local.')) {
-      clearSupabaseConfig();
-      setUrl('');
-      setAnonKey('');
-    }
-  };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +74,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       if (res.error) {
         setAuthError(res.error);
       } else {
-        setAuthSuccess('Connexion réussie !');
+        setAuthSuccess('Connexion réussie ! Vos données sont synchronisées.');
         setCurrentUserEmail(res.user?.email || email);
         if (res.user?.id) {
           const newUserId = res.user.id;
@@ -122,7 +99,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       if (res.error) {
         setAuthError(res.error);
       } else {
-        setAuthSuccess('Compte créé ! Vérifiez vos emails si la confirmation est requise.');
+        setAuthSuccess('Compte créé ! Vos données locales sont désormais reliées au Cloud.');
         if (res.user?.id) {
           const newUserId = res.user.id;
           localStorage.setItem('medagenda_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
@@ -147,6 +124,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     await signOutUser();
     setCurrentUserEmail(null);
     setAuthSuccess('Déconnecté avec succès.');
+  };
+
+  const handleManualSync = () => {
+    setIsSyncingManual(true);
+    syncEngine.triggerSync();
+    alarmService.playChime();
+    setTimeout(() => {
+      setIsSyncingManual(false);
+      setAuthSuccess('Synchronisation Cloud effectuée avec succès !');
+      setTimeout(() => setAuthSuccess(null), 3000);
+    }, 1000);
   };
 
   const handleExportBackup = async () => {
@@ -191,12 +179,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
-              <Database className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
+              <Cloud className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Paramètres & Synchronisation</h3>
-              <p className="text-xs text-slate-500">Moteur Local-First & Cloud Supabase</p>
+              <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Paramètres & Compte</h3>
+              <p className="text-xs text-slate-500 font-medium">Synchronisation Cloud & Stockage Local</p>
             </div>
           </div>
 
@@ -213,17 +201,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         <div className="flex border-b border-slate-200 bg-slate-50/50 px-5 gap-4">
           <button
             type="button"
-            onClick={() => setActiveTab('cloud')}
-            className={`py-3 text-xs font-bold border-b-2 transition-colors ${
-              activeTab === 'cloud'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Supabase Cloud
-          </button>
-          <button
-            type="button"
             onClick={() => setActiveTab('auth')}
             className={`py-3 text-xs font-bold border-b-2 transition-colors ${
               activeTab === 'auth'
@@ -231,8 +208,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            Compte & Auth
+            Compte & Synchronisation
           </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('backup')}
@@ -242,86 +220,82 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            Données & Alarmes
+            Données & Sauvegardes
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'cloud' && (
-            <form onSubmit={handleSaveConfig} className="space-y-4">
-              <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs text-indigo-900 leading-relaxed">
-                <strong>Mode Local-First Zéro Latence :</strong> L'application fonctionne à 100% sans connexion internet. Connectez votre projet Supabase pour synchroniser automatiquement vos données entre iPhone, iPad et Mac.
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  URL du Projet Supabase
-                </label>
-                <input
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://yxrjexsqscacqekpgstj.supabase.co"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Clé Anonyme (Anon Public Key)
-                </label>
-                <input
-                  type="password"
-                  value={anonKey}
-                  onChange={(e) => setAnonKey(e.target.value)}
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={handleClearConfig}
-                  className="px-3 py-2 text-xs font-semibold text-slate-500 hover:text-red-600 transition-colors"
-                >
-                  Effacer la config
-                </button>
-
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
-                >
-                  Enregistrer & Synchroniser
-                </button>
-              </div>
-            </form>
-          )}
-
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {activeTab === 'auth' && (
             <div className="space-y-4">
+              {/* Carte d'état de la connexion Supabase intégrée */}
+              <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200/80 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <span>Cloud Supabase Relié</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-200 text-emerald-800">
+                        MatApp
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-600 font-medium">
+                      Synchronisation active • Zéro latence locale
+                    </p>
+                  </div>
+                </div>
+
+                <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+              </div>
+
               {currentUserEmail ? (
-                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-center space-y-3">
-                  <div className="w-10 h-10 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                    <Check className="w-5 h-5" />
+                /* Utilisateur connecté */
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200/80 text-center space-y-3">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-xs">
+                    <User className="w-6 h-6" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">Connecté avec succès</h4>
-                    <p className="text-xs text-slate-600">{currentUserEmail}</p>
+                    <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                      Compte Actif
+                    </span>
+                    <h4 className="text-sm font-extrabold text-slate-900 mt-1">{currentUserEmail}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Vos cours et vos tâches sont synchronisés entre vos appareils
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="px-4 py-2 bg-white border border-slate-200 text-red-600 text-xs font-bold rounded-xl hover:bg-red-50 transition-colors inline-flex items-center gap-1.5"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Se déconnecter
-                  </button>
+
+                  {authSuccess && (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center justify-center gap-1.5">
+                      <Check className="w-4 h-4" />
+                      <span>{authSuccess}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleManualSync}
+                      disabled={isSyncingManual}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncingManual ? 'animate-spin' : ''}`} />
+                      <span>{isSyncingManual ? 'Synchronisation...' : 'Synchroniser maintenant'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      className="px-3.5 py-2 bg-white border border-slate-200 text-red-600 text-xs font-bold rounded-xl hover:bg-red-50 transition-colors flex items-center gap-1.5"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Se déconnecter</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <form onSubmit={handleAuthSubmit} className="space-y-3">
-                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                /* Formulaire de connexion / inscription */
+                <form onSubmit={handleAuthSubmit} className="space-y-3.5">
+                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/80">
                     <button
                       type="button"
                       onClick={() => setAuthMode('login')}
@@ -338,9 +312,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         authMode === 'register' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
                       }`}
                     >
-                      Inscription
+                      Créer un compte
                     </button>
                   </div>
+
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Connectez-vous pour retrouver automatiquement votre emploi du temps et vos tâches sur votre iPad, iPhone et ordinateur.
+                  </p>
 
                   {authError && (
                     <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-center gap-2">
@@ -358,35 +336,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Email professionnel ou universitaire
+                      Email
                     </label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="interne@chu-hopital.fr"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="etudiant@univ-sante.fr"
+                        className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                      />
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                       Mot de passe
                     </label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                      />
+                    </div>
                   </div>
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/20"
                   >
-                    {authMode === 'login' ? 'Se connecter' : 'Créer un compte'}
+                    {authMode === 'login' ? 'Se connecter' : 'Créer mon compte'}
                   </button>
                 </form>
               )}
@@ -395,15 +379,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
           {activeTab === 'backup' && (
             <div className="space-y-4">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
                 <div>
-                  <p className="font-bold text-slate-800">Stockage Local IndexedDB</p>
+                  <p className="font-bold text-slate-900">Stockage Local IndexedDB</p>
                   <p className="text-slate-500">{eventCount} événements • {taskCount} tâches</p>
                 </div>
                 <button
                   type="button"
                   onClick={handleExportBackup}
-                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 font-semibold hover:bg-slate-100 flex items-center gap-1.5 transition-colors"
+                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-100 flex items-center gap-1.5 transition-colors shadow-2xs"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Exporter JSON
@@ -411,18 +395,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
 
               {/* Test d'alarme sonore */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
                 <div>
-                  <p className="font-bold text-slate-800">Testeur de Carillon Sonore</p>
-                  <p className="text-slate-500">Signal Web Audio pour les alarmes de garde</p>
+                  <p className="font-bold text-slate-900">Testeur de Carillon Sonore</p>
+                  <p className="text-slate-500">Signal Web Audio pour les alarmes et rappels</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => alarmService.playChime()}
-                  className="px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-semibold hover:bg-indigo-100 flex items-center gap-1.5 transition-colors"
+                  className="px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-semibold hover:bg-indigo-100 flex items-center gap-1.5 transition-colors"
                 >
                   <Volume2 className="w-3.5 h-3.5" />
-                  Tester son
+                  Tester le son
                 </button>
               </div>
 
@@ -434,7 +418,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   className="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
                 >
                   <RotateCcw className="w-4 h-4" />
-                  Réinitialiser avec les données d’exemple
+                  Réinitialiser les données locales
                 </button>
               </div>
             </div>
