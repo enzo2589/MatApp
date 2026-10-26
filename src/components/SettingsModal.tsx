@@ -54,7 +54,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   useEffect(() => {
     if (isOpen) {
       const config = getSupabaseConfig();
-      setUrl(config.url);
+      setUrl(config.url || 'https://yxrjexsqscacqekpgstj.supabase.co');
       setAnonKey(config.anonKey);
 
       getAuthUser().then((user) => {
@@ -236,7 +236,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   type="url"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://xyzcompany.supabase.co"
+                  placeholder="https://yxrjexsqscacqekpgstj.supabase.co"
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                 />
               </div>

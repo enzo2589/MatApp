@@ -11,7 +11,7 @@ export function getSupabaseConfig(): { url: string; anonKey: string; isConfigure
   const customUrl = localStorage.getItem(STORAGE_SUPABASE_URL) || '';
   const customKey = localStorage.getItem(STORAGE_SUPABASE_KEY) || '';
 
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://yxrjexsqscacqekpgstj.supabase.co';
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
 
   const url = customUrl || envUrl;
