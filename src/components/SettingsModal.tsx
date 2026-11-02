@@ -30,9 +30,10 @@ import { db, seedInitialMedicalDataIfEmpty, LOCAL_USER_ID } from '../db/localDb'
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSignOut?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSignOut }) => {
   const [activeTab, setActiveTab] = useState<'auth' | 'backup'>('auth');
 
   // Auth states
@@ -124,6 +125,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     await signOutUser();
     setCurrentUserEmail(null);
     setAuthSuccess('Déconnecté avec succès.');
+    if (onSignOut) {
+      onSignOut();
+      onClose();
+    }
   };
 
   const handleManualSync = () => {

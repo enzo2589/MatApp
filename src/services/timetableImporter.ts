@@ -16,6 +16,32 @@ export interface ParsedCourseEvent {
 }
 
 /**
+ * Convertit n'importe quelle chaîne ou identifiant personnalisé en UUID v4 valide et déterministe
+ * pour assurer une compatibilité 100% stricte avec la colonne events.id UUID de Supabase.
+ */
+export function stringToUuid(str: string): string {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str)) {
+    return str.toLowerCase();
+  }
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57, h3 = 0x811c9dc5, h4 = 0xcbf29ce4;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+    h3 = Math.imul(h3 ^ ch, 2246822507);
+    h4 = Math.imul(h4 ^ ch, 3266489909);
+  }
+  const hex = [
+    (h1 >>> 0).toString(16).padStart(8, '0'),
+    (h2 >>> 0).toString(16).padStart(8, '0'),
+    (h3 >>> 0).toString(16).padStart(8, '0'),
+    (h4 >>> 0).toString(16).padStart(8, '0'),
+  ].join('');
+
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
  * Emploi du temps PASS Semaine 43 (Lundi 19 au Vendredi 23 Octobre 2026 - Faculté de Médecine de Lille)
  * Correspond exactement au document officiel fourni par l'étudiant !
  * Les créneaux consécutifs du même cours et même professeur sont fusionnés en blocs spacieux de 2h
@@ -455,13 +481,14 @@ export async function importCoursesToDatabase(
   // 2. Nettoyer aussi les déchets globaux de démo
   await cleanAllDuplicateAndDemoEvents();
 
-  // 3. Préparer les événements avec ID déterministes stables (aucun risque de doublon au re-clic)
+  // 3. Préparer les événements avec ID déterministes stables au format UUID
   const eventsToInsert: EventItem[] = courses.map((c) => {
     const safeTitleSlug = c.title.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 20).toLowerCase();
-    const deterministicId = c.id || `pass-${c.startTime.slice(0, 13)}-${safeTitleSlug}`;
+    const rawId = c.id || `pass-${c.startTime.slice(0, 13)}-${safeTitleSlug}`;
+    const deterministicUuid = stringToUuid(rawId);
 
     return {
-      id: deterministicId,
+      id: deterministicUuid,
       user_id: userId,
       title: c.title,
       description: [c.subject, c.professor, c.room].filter(Boolean).join(' • '),

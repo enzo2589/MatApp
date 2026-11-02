@@ -65,6 +65,33 @@ export function getSupabaseClient(): SupabaseClient | null {
 }
 
 /**
+ * Traduction conviviale en français des erreurs d'authentification Supabase
+ */
+export function translateAuthError(errMsg: string): string {
+  if (!errMsg) return 'Une erreur est survenue lors de l’authentification.';
+  const lower = errMsg.toLowerCase();
+  if (lower.includes('invalid login credentials') || lower.includes('invalid_grant')) {
+    return 'Adresse email ou mot de passe incorrect.';
+  }
+  if (lower.includes('user already registered') || lower.includes('already registered') || lower.includes('already exists')) {
+    return 'Un compte existe déjà avec cette adresse email. Veuillez vous connecter.';
+  }
+  if (lower.includes('password should be at least')) {
+    return 'Le mot de passe doit comporter au moins 6 caractères.';
+  }
+  if (lower.includes('email not confirmed')) {
+    return 'Votre adresse email n’est pas encore confirmée. Vérifiez vos emails ou désactivez la confirmation dans Supabase.';
+  }
+  if (lower.includes('rate limit')) {
+    return 'Trop de tentatives en peu de temps. Veuillez patienter une minute avant de réessayer.';
+  }
+  if (lower.includes('valid email')) {
+    return 'Veuillez saisir une adresse email valide.';
+  }
+  return errMsg;
+}
+
+/**
  * Récupère l'utilisateur actuellement connecté
  */
 export async function getAuthUser(): Promise<User | null> {
@@ -84,28 +111,54 @@ export async function getAuthUser(): Promise<User | null> {
 /**
  * Inscription par email et mot de passe
  */
-export async function signUpWithEmail(email: string, password: string): Promise<{ user: User | null; error: string | null }> {
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  metadata?: { full_name?: string }
+): Promise<{ user: User | null; session: Session | null; needsEmailConfirmation: boolean; error: string | null }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { user: null, error: "Supabase n'est pas encore configuré." };
+    return { user: null, session: null, needsEmailConfirmation: false, error: "Supabase n'est pas encore configuré." };
   }
 
   try {
     const { data, error } = await client.auth.signUp({
-      email,
+      email: email.trim(),
       password,
+      options: {
+        data: metadata,
+      },
     });
-    if (error) return { user: null, error: error.message };
-    return { user: data.user, error: null };
+
+    if (error) {
+      return { user: null, session: null, needsEmailConfirmation: false, error: translateAuthError(error.message) };
+    }
+
+    const needsEmailConfirmation = Boolean(data.user && !data.session);
+
+    return {
+      user: data.user,
+      session: data.session,
+      needsEmailConfirmation,
+      error: null,
+    };
   } catch (err: any) {
-    return { user: null, error: err.message || 'Erreur inconnue lors de l’inscription' };
+    return {
+      user: null,
+      session: null,
+      needsEmailConfirmation: false,
+      error: translateAuthError(err.message || 'Erreur inconnue lors de l’inscription'),
+    };
   }
 }
 
 /**
  * Connexion par email et mot de passe
  */
-export async function signInWithEmail(email: string, password: string): Promise<{ user: User | null; session: Session | null; error: string | null }> {
+export async function signInWithEmail(
+  email: string,
+  password: string
+): Promise<{ user: User | null; session: Session | null; error: string | null }> {
   const client = getSupabaseClient();
   if (!client) {
     return { user: null, session: null, error: "Supabase n'est pas encore configuré." };
@@ -113,18 +166,44 @@ export async function signInWithEmail(email: string, password: string): Promise<
 
   try {
     const { data, error } = await client.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
-    if (error) return { user: null, session: null, error: error.message };
+
+    if (error) {
+      return { user: null, session: null, error: translateAuthError(error.message) };
+    }
+
     return { user: data.user, session: data.session, error: null };
   } catch (err: any) {
-    return { user: null, session: null, error: err.message || 'Erreur inconnue lors de la connexion' };
+    return {
+      user: null,
+      session: null,
+      error: translateAuthError(err.message || 'Erreur inconnue lors de la connexion'),
+    };
   }
 }
 
 /**
- * Déconnexion
+ * Écouter les changements d'état de session Supabase (Connexion, Déconnexion, Refresh)
+ */
+export function onAuthStateChange(callback: (event: string, session: Session | null) => void): () => void {
+  const client = getSupabaseClient();
+  if (!client) return () => {};
+
+  try {
+    const { data: { subscription } } = client.auth.onAuthStateChange(callback);
+    return () => {
+      subscription.unsubscribe();
+    };
+  } catch (e) {
+    console.warn('Erreur écoute authStateChange:', e);
+    return () => {};
+  }
+}
+
+/**
+ * Déconnexion complète
  */
 export async function signOutUser(): Promise<void> {
   const client = getSupabaseClient();
@@ -136,4 +215,5 @@ export async function signOutUser(): Promise<void> {
     }
   }
   localStorage.removeItem('medagenda_current_user');
+  localStorage.removeItem('medagenda_guest_mode');
 }

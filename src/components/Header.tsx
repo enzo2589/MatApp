@@ -5,6 +5,8 @@ import {
   Bell,
   CalendarCheck,
   CheckCircle2,
+  LogOut,
+  User as UserIcon,
 } from 'lucide-react';
 import { alarmService } from '../services/alarmService';
 import { clsx } from 'clsx';
@@ -14,12 +16,16 @@ interface HeaderProps {
   onOpenTodoList: () => void;
   onOpenImportModal?: () => void;
   pendingTasksCount: number;
+  userEmail?: string | null;
+  onSignOut?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenTodoList,
   pendingTasksCount,
+  userEmail,
+  onSignOut,
 }) => {
   const [hasNotifPermission, setHasNotifPermission] = useState(alarmService.hasNotificationPermission());
   const [justTested, setJustTested] = useState(false);
@@ -38,7 +44,6 @@ export const Header: React.FC<HeaderProps> = ({
       setHasNotifPermission(granted);
 
       if (granted) {
-        // Envoi d'une notification système de confirmation immédiate
         if (typeof window !== 'undefined' && 'Notification' in window) {
           try {
             new Notification('🔔 Rappels MedAgenda Activés', {
@@ -48,7 +53,6 @@ export const Header: React.FC<HeaderProps> = ({
           } catch {}
         }
       } else if (perm === 'denied') {
-        // Notification bloquée par le navigateur : guider l'utilisateur
         alert(
           "ℹ️ Les notifications système sont bloquées par votre navigateur.\n\n" +
           "Pour les autoriser :\n" +
@@ -87,7 +91,28 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Actions de l'En-tête */}
       <div className="flex items-center gap-2">
-        {/* Bouton de Rappels & Notifications (Réparé & Interactif) */}
+        {/* Pastille Utilisateur connecté / Invité */}
+        {userEmail ? (
+          <div
+            onClick={onOpenSettings}
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/90 text-xs font-semibold text-slate-700 cursor-pointer transition-colors"
+            title={`Connecté en tant que ${userEmail}`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs" />
+            <span className="max-w-[130px] truncate">{userEmail}</span>
+          </div>
+        ) : (
+          <div
+            onClick={onOpenSettings}
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-500 cursor-pointer"
+            title="Mode Invité (Local)"
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span>Mode Invité</span>
+          </div>
+        )}
+
+        {/* Bouton de Rappels & Notifications */}
         <button
           type="button"
           onClick={handleToggleOrTestNotif}
@@ -148,6 +173,18 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Settings className="w-5 h-5" />
         </button>
+
+        {/* Bouton Déconnexion rapide */}
+        {onSignOut && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+            title="Se déconnecter"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </header>
   );

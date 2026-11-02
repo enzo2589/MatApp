@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, seedInitialMedicalDataIfEmpty } from './db/localDb';
+import { db, seedInitialMedicalDataIfEmpty, LOCAL_USER_ID } from './db/localDb';
 import { syncEngine } from './services/syncEngine';
 import { alarmService } from './services/alarmService';
+import { getAuthUser, onAuthStateChange, signOutUser } from './services/supabaseClient';
+import { AuthPage } from './components/Auth/AuthPage';
 import { Header } from './components/Header';
 import { CalendarView } from './components/Calendar/CalendarView';
 import { PersistentTodoList } from './components/TodoList/PersistentTodoList';
@@ -13,25 +15,61 @@ import { TimetableImportModal } from './components/TimetableImportModal';
 import { cleanAllDuplicateAndDemoEvents } from './services/timetableImporter';
 import { AlarmBanner } from './components/AlarmBanner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CalendarCheck, CalendarDays, CheckSquare, Sparkles } from 'lucide-react';
+import { CalendarCheck, CalendarDays, CheckSquare, Sparkles, Activity } from 'lucide-react';
 import { clsx } from 'clsx';
+import { User } from '@supabase/supabase-js';
 
 export function App() {
+  const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'guest' | 'unauthenticated'>('loading');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isMobileTodoOpen, setIsMobileTodoOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'calendar' | 'sidebar' | 'todo'>('calendar');
 
-  // Initialisation au premier chargement
+  // Vérification de l'authentification et initialisation au démarrage
   useEffect(() => {
     seedInitialMedicalDataIfEmpty();
     cleanAllDuplicateAndDemoEvents();
-    syncEngine.init();
     alarmService.startAlarmLoop();
+
+    const isGuest = localStorage.getItem('medagenda_guest_mode') === 'true';
+
+    // Vérifier la session Supabase existante
+    getAuthUser().then((user) => {
+      if (user) {
+        setCurrentUser(user);
+        setAuthState('authenticated');
+        localStorage.setItem('medagenda_current_user', JSON.stringify({ id: user.id, email: user.email }));
+        syncEngine.init();
+      } else if (isGuest) {
+        setAuthState('guest');
+        syncEngine.init();
+      } else {
+        setAuthState('unauthenticated');
+      }
+    });
+
+    // Écouter les changements de session en temps réel
+    const unsub = onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        setAuthState('authenticated');
+        localStorage.setItem('medagenda_current_user', JSON.stringify({ id: session.user.id, email: session.user.email }));
+        localStorage.removeItem('medagenda_guest_mode');
+        syncEngine.setupRealtimeSubscription();
+        syncEngine.triggerSync();
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setAuthState('unauthenticated');
+      }
+    });
 
     return () => {
       alarmService.stopAlarmLoop();
+      unsub();
     };
   }, []);
 
@@ -47,6 +85,66 @@ export function App() {
     []
   );
 
+  const handleAuthSuccess = async (user: User) => {
+    setCurrentUser(user);
+    setAuthState('authenticated');
+    localStorage.setItem('medagenda_current_user', JSON.stringify({ id: user.id, email: user.email }));
+    localStorage.removeItem('medagenda_guest_mode');
+
+    // Migration des éléments locaux vers le compte de l'étudiant
+    try {
+      await db.events.where('user_id').equals(LOCAL_USER_ID).modify({
+        user_id: user.id,
+        sync_status: 'pending_create',
+      });
+      await db.tasks.where('user_id').equals(LOCAL_USER_ID).modify({
+        user_id: user.id,
+        sync_status: 'pending_create',
+      });
+    } catch (e) {
+      console.warn('Erreur migration user_id:', e);
+    }
+
+    syncEngine.init();
+    syncEngine.setupRealtimeSubscription();
+    syncEngine.triggerSync();
+  };
+
+  const handleContinueAsGuest = () => {
+    localStorage.setItem('medagenda_guest_mode', 'true');
+    setAuthState('guest');
+    syncEngine.init();
+  };
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    setCurrentUser(null);
+    setAuthState('unauthenticated');
+  };
+
+  // 1. Écran de chargement ultra-court au boot
+  if (authState === 'loading') {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white select-none">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center shadow-xl shadow-indigo-500/25 animate-pulse mb-3">
+          <Activity className="w-7 h-7 stroke-[2.5]" />
+        </div>
+        <p className="text-xs font-bold text-slate-400 tracking-wider uppercase">Chargement de MedAgenda...</p>
+      </div>
+    );
+  }
+
+  // 2. Écran d'accueil de Connexion / Inscription si non connecté
+  if (authState === 'unauthenticated') {
+    return (
+      <AuthPage
+        onSuccess={handleAuthSuccess}
+        onContinueAsGuest={handleContinueAsGuest}
+      />
+    );
+  }
+
+  // 3. Application principale complète
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-100/80 overflow-hidden font-sans">
       {/* Bannière d'Alarme Prioritaire Flottante */}
@@ -57,6 +155,8 @@ export function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTodoList={() => setIsMobileTodoOpen(true)}
         pendingTasksCount={pendingTasksCount}
+        userEmail={currentUser?.email || (authState === 'guest' ? 'Invité (Local)' : null)}
+        onSignOut={handleSignOut}
       />
 
       {/* Barre d'onglets mobile (sur iPhone / petits écrans) */}
@@ -109,52 +209,39 @@ export function App() {
         </button>
       </div>
 
-      {/* Zone Principale Responsive (conforme au croquis de l'utilisateur !) */}
+      {/* Zone Principale Responsive */}
       <main className="flex-1 flex overflow-hidden relative">
-        {/* =========================================================================
-            PANNEAU GAUCHE (Desktop / iPad : colonne permanente de 350px)
-            Contient exactement les 3 blocs du dessin :
-            1. "MOIS" (MiniMonthPicker avec cercle rose)
-            2. "IMAGE QUE JE CHOISIS" (CustomImageWidget)
-            3. "TO DO LIST" (PersistentTodoList)
-           ========================================================================= */}
+        {/* PANNEAU GAUCHE (Desktop / iPad : colonne permanente) */}
         <aside
           className={clsx(
             'w-full md:w-[330px] lg:w-[360px] xl:w-[380px] h-full flex flex-col p-3 gap-3 overflow-y-auto bg-slate-100/90 border-r border-slate-200/90 shrink-0 select-none scrollbar-thin',
-            // Sur mobile : visible uniquement si tab 'sidebar' ou 'todo'
             mobileTab === 'calendar' ? 'hidden md:flex' : 'flex'
           )}
         >
-          {/* Bloc 1 : "MOIS" (Croquis haut gauche) */}
-          {(mobileTab === 'sidebar' || typeof window === 'undefined' || true) && (
-            <div className={clsx(mobileTab === 'todo' ? 'hidden md:block' : 'block')}>
-              <MiniMonthPicker
-                currentDate={currentDate}
-                onSelectDate={(newDate) => {
-                  setCurrentDate(newDate);
-                  setMobileTab('calendar');
-                }}
-                events={allEvents || []}
-              />
-            </div>
-          )}
+          {/* Bloc 1 : "MOIS" */}
+          <div className={clsx(mobileTab === 'todo' ? 'hidden md:block' : 'block')}>
+            <MiniMonthPicker
+              currentDate={currentDate}
+              onSelectDate={(newDate) => {
+                setCurrentDate(newDate);
+                setMobileTab('calendar');
+              }}
+              events={allEvents || []}
+            />
+          </div>
 
-          {/* Bloc 2 : "IMAGE QUE JE CHOISIS" (Croquis milieu gauche) */}
+          {/* Bloc 2 : "IMAGE QUE JE CHOISIS" */}
           <div className={clsx(mobileTab === 'todo' ? 'hidden md:block' : 'block')}>
             <CustomImageWidget />
           </div>
 
-          {/* Bloc 3 : "TO DO LIST" (Croquis bas gauche) */}
+          {/* Bloc 3 : "TO DO LIST" */}
           <div className={clsx('flex-1 min-h-[240px]', mobileTab === 'sidebar' ? 'hidden md:flex' : 'flex')}>
             <PersistentTodoList isCompactInSidebar={true} />
           </div>
         </aside>
 
-        {/* =========================================================================
-            PANNEAU DROIT (Grand agenda interactif de la "SEMAINE")
-            Prend 70% ou tout le reste de l'écran, avec timeline horaire 1h, 2h...
-            et colonnes L M M J V S D
-           ========================================================================= */}
+        {/* PANNEAU DROIT (Grand agenda interactif de la SEMAINE) */}
         <div
           className={clsx(
             'flex-1 h-full flex flex-col overflow-hidden',
@@ -206,7 +293,6 @@ export function App() {
                 transition={{ type: 'spring', damping: 28, stiffness: 300 }}
                 className="h-[80vh] bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden border-t border-slate-200 safe-bottom"
               >
-                {/* Poignée tactile de fermeture */}
                 <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-2 shrink-0" />
                 <div className="flex-1 overflow-hidden flex flex-col">
                   <PersistentTodoList onCloseMobileDrawer={() => setIsMobileTodoOpen(false)} />
@@ -221,6 +307,7 @@ export function App() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        onSignOut={handleSignOut}
       />
 
       {/* Modal Import Automatique Emploi du Temps Étudiant */}
