@@ -77,15 +77,18 @@ class SyncEngine {
 
   public async refreshPendingCount(): Promise<number> {
     try {
-      const pendingEvents = await db.events
+      const userId = getCurrentUserId();
+      const allPendingEvents = await db.events
         .where('sync_status')
         .anyOf('pending_create', 'pending_update', 'pending_delete')
-        .count();
+        .toArray();
+      const pendingEvents = allPendingEvents.filter((e) => e.user_id === userId).length;
 
-      const pendingTasks = await db.tasks
+      const allPendingTasks = await db.tasks
         .where('sync_status')
         .anyOf('pending_create', 'pending_update', 'pending_delete')
-        .count();
+        .toArray();
+      const pendingTasks = allPendingTasks.filter((t) => t.user_id === userId).length;
 
       this.pendingCount = pendingEvents + pendingTasks;
       this.notifyStatus();
@@ -143,13 +146,15 @@ class SyncEngine {
   }
 
   /**
-   * PUSH Events
+   * PUSH Events (strictement restreint aux événements de cet utilisateur)
    */
   private async pushLocalEventsToRemote(client: any, userId: string) {
-    const pendingEvents = await db.events
+    const allPending = await db.events
       .where('sync_status')
       .anyOf('pending_create', 'pending_update', 'pending_delete')
       .toArray();
+
+    const pendingEvents = allPending.filter((evt) => evt.user_id === userId);
 
     for (const evt of pendingEvents) {
       try {
@@ -194,13 +199,15 @@ class SyncEngine {
   }
 
   /**
-   * PUSH Tasks
+   * PUSH Tasks (strictement restreint aux tâches de cet utilisateur)
    */
   private async pushLocalTasksToRemote(client: any, userId: string) {
-    const pendingTasks = await db.tasks
+    const allPending = await db.tasks
       .where('sync_status')
       .anyOf('pending_create', 'pending_update', 'pending_delete')
       .toArray();
+
+    const pendingTasks = allPending.filter((t) => t.user_id === userId);
 
     for (const t of pendingTasks) {
       try {

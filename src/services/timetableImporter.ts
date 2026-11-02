@@ -403,31 +403,24 @@ export function parseICS(icsContent: string): ParsedCourseEvent[] {
 }
 
 /**
- * Nettoyage intégral de tous les doublons et des déchets de démonstration (ex: 'Box 1', etc.)
- * Garantit un agenda 100% propre et lisible
+ * Nettoyage des doublons stricts pour l'utilisateur connecté
+ * Ne supprime JAMAIS les événements légitimes créés par les utilisateurs
  */
 export async function cleanAllDuplicateAndDemoEvents(): Promise<number> {
-  const allEvents = await db.events.toArray();
+  const userId = getCurrentUserId();
+  const userEvents = await db.events.where('user_id').equals(userId).toArray();
   const seenKeys = new Set<string>();
   const toDeleteIds: string[] = [];
 
-  for (const ev of allEvents) {
+  for (const ev of userEvents) {
     if (ev.is_deleted) continue;
 
-    // Détecter les événements de démonstration parasites qui n'ont rien à faire sur l'emploi du temps
-    const isDemoJunk =
-      ev.title.includes('Box 1') ||
-      ev.title.includes('Garde Externe') ||
-      ev.title.includes('Médecine Interne') ||
-      ev.title.includes('Bloc Opératoire') ||
-      ev.title.includes('Pause Déj Carabin');
-
-    // Clé de détection de doublons : date/heure + titre
+    // Clé de détection de doublons stricts : date/heure + titre
     const dateKey = ev.start_time ? ev.start_time.slice(0, 16) : '';
     const normTitle = ev.title.trim().toLowerCase();
     const key = `${dateKey}_${normTitle}`;
 
-    if (seenKeys.has(key) || isDemoJunk) {
+    if (seenKeys.has(key)) {
       toDeleteIds.push(ev.id);
     } else {
       seenKeys.add(key);
@@ -443,7 +436,7 @@ export async function cleanAllDuplicateAndDemoEvents(): Promise<number> {
 
 /**
  * Enregistrement en masse des cours importés dans Dexie (IndexedDB)
- * Supprime automatiquement les doublons et les anciens événements de la semaine
+ * Supprime uniquement les anciens cours de CET utilisateur sur cette semaine
  * 0 ms de latence perçue !
  */
 export async function importCoursesToDatabase(
@@ -453,18 +446,17 @@ export async function importCoursesToDatabase(
   const userId = getCurrentUserId();
   const now = new Date().toISOString();
 
-  // 1. Si demandé, supprimer tous les événements existants de cette semaine pour éliminer
-  //    définitivement tout doublon ou données de démo parasites
+  // 1. Si demandé, supprimer uniquement les cours existants de CET utilisateur pour cette semaine
   if (cleanExistingWeek && courses.length > 0) {
     const allStartTimes = courses.map((c) => parseISO(c.startTime).getTime());
     const minTime = Math.min(...allStartTimes);
     const weekStart = startOfWeek(new Date(minTime), { weekStartsOn: 1 });
     const weekEnd = addDays(weekStart, 7);
 
-    const existingEvents = await db.events.toArray();
+    const userEvents = await db.events.where('user_id').equals(userId).toArray();
     const toDeleteIds: string[] = [];
 
-    for (const ev of existingEvents) {
+    for (const ev of userEvents) {
       try {
         const evTime = parseISO(ev.start_time).getTime();
         if (evTime >= weekStart.getTime() && evTime < weekEnd.getTime()) {

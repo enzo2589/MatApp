@@ -444,6 +444,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     const end = addDays(parseISO(event.end_time), daysOffset);
 
     const newEvent = {
+      user_id: event.user_id,
       title: `${event.title} (Copie)`,
       description: event.description || '',
       color: event.color,

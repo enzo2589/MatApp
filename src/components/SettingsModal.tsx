@@ -25,7 +25,7 @@ import {
 } from '../services/supabaseClient';
 import { syncEngine } from '../services/syncEngine';
 import { alarmService } from '../services/alarmService';
-import { db, seedInitialMedicalDataIfEmpty, LOCAL_USER_ID } from '../db/localDb';
+import { db, getCurrentUserId } from '../db/localDb';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -55,8 +55,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         setCurrentUserEmail(user?.email || null);
       });
 
-      db.events.count().then(setEventCount);
-      db.tasks.count().then(setTaskCount);
+      const currentUserId = getCurrentUserId();
+      db.events.where('user_id').equals(currentUserId).filter((e) => !e.is_deleted).count().then(setEventCount);
+      db.tasks.where('user_id').equals(currentUserId).filter((t) => !t.is_deleted).count().then(setTaskCount);
     }
   }, [isOpen]);
 
@@ -79,17 +80,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         setCurrentUserEmail(res.user?.email || email);
         if (res.user?.id) {
           const newUserId = res.user.id;
+          localStorage.setItem('matapp_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
           localStorage.setItem('medagenda_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
-
-          // Migrer tous les événements et tâches locaux vers ce compte Supabase
-          await db.events.where('user_id').equals(LOCAL_USER_ID).modify({
-            user_id: newUserId,
-            sync_status: 'pending_create',
-          });
-          await db.tasks.where('user_id').equals(LOCAL_USER_ID).modify({
-            user_id: newUserId,
-            sync_status: 'pending_create',
-          });
 
           syncEngine.setupRealtimeSubscription();
           syncEngine.triggerSync();
@@ -100,19 +92,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       if (res.error) {
         setAuthError(res.error);
       } else {
-        setAuthSuccess('Compte créé ! Vos données locales sont désormais reliées au Cloud.');
+        setAuthSuccess('Compte créé avec succès !');
         if (res.user?.id) {
           const newUserId = res.user.id;
+          localStorage.setItem('matapp_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
           localStorage.setItem('medagenda_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
-
-          await db.events.where('user_id').equals(LOCAL_USER_ID).modify({
-            user_id: newUserId,
-            sync_status: 'pending_create',
-          });
-          await db.tasks.where('user_id').equals(LOCAL_USER_ID).modify({
-            user_id: newUserId,
-            sync_status: 'pending_create',
-          });
 
           syncEngine.setupRealtimeSubscription();
           syncEngine.triggerSync();
@@ -143,11 +127,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   };
 
   const handleExportBackup = async () => {
-    const events = await db.events.toArray();
-    const tasks = await db.tasks.toArray();
+    const currentUserId = getCurrentUserId();
+    const events = await db.events.where('user_id').equals(currentUserId).filter((e) => !e.is_deleted).toArray();
+    const tasks = await db.tasks.where('user_id').equals(currentUserId).filter((t) => !t.is_deleted).toArray();
 
     const backupData = {
       version: 1,
+      userId: currentUserId,
       exportedAt: new Date().toISOString(),
       events,
       tasks,
@@ -163,10 +149,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   };
 
   const handleResetData = async () => {
-    if (window.confirm('Réinitialiser toutes les données locales et recharger les exemples médicaux ?')) {
-      await db.events.clear();
-      await db.tasks.clear();
-      await seedInitialMedicalDataIfEmpty();
+    if (window.confirm('Voulez-vous réinitialiser votre emploi du temps et vos tâches pour ce compte ?')) {
+      const currentUserId = getCurrentUserId();
+      const userEvents = await db.events.where('user_id').equals(currentUserId).toArray();
+      const userTasks = await db.tasks.where('user_id').equals(currentUserId).toArray();
+      if (userEvents.length > 0) {
+        await db.events.bulkDelete(userEvents.map((e) => e.id));
+      }
+      if (userTasks.length > 0) {
+        await db.tasks.bulkDelete(userTasks.map((t) => t.id));
+      }
       window.location.reload();
     }
   };

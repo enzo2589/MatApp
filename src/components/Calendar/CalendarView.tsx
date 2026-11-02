@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, saveLocalEvent, deleteLocalEvent } from '../../db/localDb';
+import { db, saveLocalEvent, deleteLocalEvent, getCurrentUserId } from '../../db/localDb';
 import { EventItem, CalendarViewMode } from '../../types';
 import { WeekGrid } from './WeekGrid';
 import { MonthGrid } from './MonthGrid';
@@ -29,6 +29,7 @@ import { useDrag } from '@use-gesture/react';
 import { clsx } from 'clsx';
 
 interface CalendarViewProps {
+  userId?: string;
   currentDate?: Date;
   onSelectDate?: (date: Date) => void;
   onOpenTodoList?: () => void;
@@ -37,6 +38,7 @@ interface CalendarViewProps {
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
+  userId,
   currentDate: externalDate,
   onSelectDate: externalOnSelectDate,
   onOpenTodoList,
@@ -61,10 +63,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEventData, setSelectedEventData] = useState<Partial<EventItem> | null>(null);
 
-  // Live Query Dexie réactif instantané (0 ms)
+  // Live Query Dexie réactif instantané (0 ms) STRICTEMENT filtré par utilisateur
+  const activeUserId = userId || getCurrentUserId();
   const events = useLiveQuery(
-    () => db.events.filter((e) => !e.is_deleted).toArray(),
-    []
+    () => db.events.where('user_id').equals(activeUserId).filter((e) => !e.is_deleted).toArray(),
+    [activeUserId]
   );
 
   // Calcul des jours affichés (toujours sur 7 jours exacts : Lundi à Dimanche)
@@ -129,6 +132,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   // Gestion de la sélection de créneau
   const handleSelectSlot = (start: Date, end: Date) => {
     setSelectedEventData({
+      user_id: activeUserId,
       start_time: start.toISOString(),
       end_time: end.toISOString(),
       color: 'cours',
@@ -143,7 +147,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const handleSaveEvent = async (eventData: Partial<EventItem>) => {
-    await saveLocalEvent(eventData as any);
+    await saveLocalEvent({
+      ...eventData,
+      user_id: eventData.user_id || activeUserId,
+    } as any);
   };
 
   const handleDeleteEvent = async (id: string) => {
@@ -250,7 +257,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
           )}
 
-          {/* Bouton Nouvel Événement Rapide */}
+          {/* Bouton Nouvel Événement */}
           <button
             type="button"
             onClick={() => {
@@ -260,7 +267,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all"
           >
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Création Éclair</span>
+            <span className="hidden sm:inline">Nouvelle activité</span>
           </button>
         </div>
       </div>

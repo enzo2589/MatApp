@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, seedInitialMedicalDataIfEmpty, LOCAL_USER_ID } from './db/localDb';
+import { db, getCurrentUserId } from './db/localDb';
 import { syncEngine } from './services/syncEngine';
 import { alarmService } from './services/alarmService';
 import { getAuthUser, onAuthStateChange, signOutUser } from './services/supabaseClient';
@@ -12,7 +12,6 @@ import { MiniMonthPicker } from './components/Calendar/MiniMonthPicker';
 import { CustomImageWidget } from './components/StudentWidget/CustomImageWidget';
 import { SettingsModal } from './components/SettingsModal';
 import { TimetableImportModal } from './components/TimetableImportModal';
-import { cleanAllDuplicateAndDemoEvents } from './services/timetableImporter';
 import { AlarmBanner } from './components/AlarmBanner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarCheck, CalendarDays, CheckSquare, Sparkles, Calendar } from 'lucide-react';
@@ -50,8 +49,6 @@ export function App() {
 
   // Initialisation et vérification de la session en arrière-plan
   useEffect(() => {
-    seedInitialMedicalDataIfEmpty();
-    cleanAllDuplicateAndDemoEvents();
     alarmService.startAlarmLoop();
 
     // Vérifier la session Supabase active en arrière-plan
@@ -102,16 +99,18 @@ export function App() {
     };
   }, []);
 
-  // Décompte réactif des tâches non terminées pour le badge
+  // Décompte réactif des tâches non terminées pour le badge (strictement isolé par utilisateur)
+  const currentUserId = currentUser?.id || getCurrentUserId();
+
   const pendingTasksCount = useLiveQuery(
-    () => db.tasks.filter((t) => !t.is_deleted && !t.is_completed).count(),
-    []
+    () => db.tasks.where('user_id').equals(currentUserId).filter((t) => !t.is_deleted && !t.is_completed).count(),
+    [currentUserId]
   ) || 0;
 
-  // Tous les événements pour les indicateurs de jours du MiniMonth
+  // Tous les événements pour les indicateurs de jours du MiniMonth (strictement isolé par utilisateur)
   const allEvents = useLiveQuery(
-    () => db.events.filter((e) => !e.is_deleted).toArray(),
-    []
+    () => db.events.where('user_id').equals(currentUserId).filter((e) => !e.is_deleted).toArray(),
+    [currentUserId]
   );
 
   const handleAuthSuccess = async (user: User) => {
@@ -121,20 +120,6 @@ export function App() {
     localStorage.setItem('matapp_user', JSON.stringify(userObj));
     localStorage.setItem('matapp_current_user', JSON.stringify(userObj));
     localStorage.setItem('medagenda_current_user', JSON.stringify(userObj));
-
-    // Migration des éléments créés localement vers le compte de l'étudiant
-    try {
-      await db.events.where('user_id').equals(LOCAL_USER_ID).modify({
-        user_id: user.id,
-        sync_status: 'pending_create',
-      });
-      await db.tasks.where('user_id').equals(LOCAL_USER_ID).modify({
-        user_id: user.id,
-        sync_status: 'pending_create',
-      });
-    } catch (e) {
-      console.warn('Erreur migration user_id:', e);
-    }
 
     syncEngine.init();
     syncEngine.setupRealtimeSubscription();
@@ -260,7 +245,7 @@ export function App() {
 
           {/* Bloc 3 : "TO DO LIST" */}
           <div className={clsx('flex-1 min-h-[240px]', mobileTab === 'sidebar' ? 'hidden md:flex' : 'flex')}>
-            <PersistentTodoList isCompactInSidebar={true} />
+            <PersistentTodoList isCompactInSidebar={true} userId={currentUserId} />
           </div>
         </aside>
 
@@ -272,6 +257,7 @@ export function App() {
           )}
         >
           <CalendarView
+            userId={currentUserId}
             currentDate={currentDate}
             onSelectDate={setCurrentDate}
             onOpenTodoList={() => setIsMobileTodoOpen(true)}
@@ -318,7 +304,7 @@ export function App() {
               >
                 <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-2 shrink-0" />
                 <div className="flex-1 overflow-hidden flex flex-col">
-                  <PersistentTodoList onCloseMobileDrawer={() => setIsMobileTodoOpen(false)} />
+                  <PersistentTodoList onCloseMobileDrawer={() => setIsMobileTodoOpen(false)} userId={currentUserId} />
                 </div>
               </motion.div>
             </div>

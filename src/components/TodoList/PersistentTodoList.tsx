@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, saveLocalTask, toggleTaskCompletion, deleteLocalTask } from '../../db/localDb';
+import { db, saveLocalTask, toggleTaskCompletion, deleteLocalTask, getCurrentUserId } from '../../db/localDb';
 import { MEDICAL_COLORS, getColorTheme } from '../../constants/colors';
 import { alarmService } from '../../services/alarmService';
 import {
@@ -20,6 +20,7 @@ import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 interface PersistentTodoListProps {
+  userId?: string;
   onCloseMobileDrawer?: () => void;
   isCompactInSidebar?: boolean;
 }
@@ -33,6 +34,7 @@ const QUICK_SUGGESTIONS = [
 ];
 
 export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
+  userId,
   onCloseMobileDrawer,
   isCompactInSidebar = false,
 }) => {
@@ -43,10 +45,11 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
   const [alarmOption, setAlarmOption] = useState<'none' | '1h' | 'today_evening' | 'tomorrow_morning'>('none');
   const [isCompletedOpen, setIsCompletedOpen] = useState(false);
 
-  // Live Query Dexie réactif instantané (0 ms)
+  // Live Query Dexie réactif instantané (0 ms) STRICTEMENT filtré par utilisateur
+  const activeUserId = userId || getCurrentUserId();
   const allTasks = useLiveQuery(
-    () => db.tasks.filter((t) => !t.is_deleted).toArray(),
-    []
+    () => db.tasks.where('user_id').equals(activeUserId).filter((t) => !t.is_deleted).toArray(),
+    [activeUserId]
   );
 
   const activeTasks = (allTasks || [])
@@ -76,6 +79,7 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
     }
 
     await saveLocalTask({
+      user_id: activeUserId,
       title: newTitle.trim(),
       color: selectedColor,
       is_completed: false,
@@ -284,6 +288,7 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
               type="button"
               onClick={() => {
                 saveLocalTask({
+                  user_id: activeUserId,
                   title: sug.label,
                   color: sug.color,
                   is_completed: false,

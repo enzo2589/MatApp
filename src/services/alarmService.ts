@@ -1,4 +1,4 @@
-import { db } from '../db/localDb';
+import { db, getCurrentUserId } from '../db/localDb';
 import { EventItem, TaskItem } from '../types';
 import { differenceInMinutes, parseISO, isAfter, isBefore, addMinutes } from 'date-fns';
 
@@ -158,9 +158,14 @@ class AlarmService {
   public async checkAlarms() {
     try {
       const now = new Date();
+      const currentUserId = getCurrentUserId();
 
-      // 1. Événements de l'agenda
-      const events = await db.events.filter((e) => !e.is_deleted).toArray();
+      // 1. Événements de l'agenda (isolés par utilisateur)
+      const events = await db.events
+        .where('user_id')
+        .equals(currentUserId)
+        .filter((e) => !e.is_deleted)
+        .toArray();
 
       for (const event of events) {
         if (!event.alarms || event.alarms.length === 0) continue;
@@ -198,8 +203,12 @@ class AlarmService {
         }
       }
 
-      // 2. Tâches To-Do avec rappel
-      const tasks = await db.tasks.filter((t) => !t.is_deleted && !t.is_completed && !!t.alarm_time).toArray();
+      // 2. Tâches To-Do avec rappel (isolées par utilisateur)
+      const tasks = await db.tasks
+        .where('user_id')
+        .equals(currentUserId)
+        .filter((t) => !t.is_deleted && !t.is_completed && !!t.alarm_time)
+        .toArray();
 
       for (const task of tasks) {
         if (!task.alarm_time) continue;
