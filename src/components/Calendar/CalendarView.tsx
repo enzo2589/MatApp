@@ -101,13 +101,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     handleUpdateDate(today);
   };
 
-  // Support des Gestes Tactiles de Swipe (use-gesture)
+  // Support des Gestes Tactiles de Swipe (use-gesture) - Calibré pour éviter les changements involontaires de semaine
   const bindGesture = useDrag(
-    ({ swipe: [swipeX], movement: [mx], cancel }) => {
-      if (Math.abs(mx) > 60 || swipeX !== 0) {
-        if (mx < -50 || swipeX === -1) {
+    ({ movement: [mx, my], velocity: [vx], cancel }) => {
+      // Le geste doit être très nettement horizontal (au moins 2.2x plus horizontal que vertical)
+      const isClearlyHorizontal = Math.abs(mx) > Math.abs(my) * 2.2;
+      // Seuil franc pour éviter les déclenchements trop sensibles (au moins 130px ou geste vif avec > 75px)
+      const isDeliberate = Math.abs(mx) > 130 || (Math.abs(vx) > 0.8 && Math.abs(mx) > 75);
+
+      if (isClearlyHorizontal && isDeliberate) {
+        if (mx < 0) {
           handleNext();
-        } else if (mx > 50 || swipeX === 1) {
+        } else {
           handlePrev();
         }
         cancel();
@@ -117,6 +122,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       axis: 'x',
       filterTaps: true,
       rubberband: true,
+      threshold: 25,
     }
   );
 

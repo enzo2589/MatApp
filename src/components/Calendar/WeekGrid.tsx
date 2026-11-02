@@ -84,6 +84,15 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   // Inspecteur rapide Apple pour événement cliqué
   const [quickInspectEvent, setQuickInspectEvent] = useState<EventItem | null>(null);
 
+  // Référence pour mémoriser le premier tap pour la détection du double-tap sur mobile/iPad
+  const lastTouchTapRef = useRef<{
+    time: number;
+    x: number;
+    y: number;
+    dayKey: string;
+    slotMinutes: number;
+  } | null>(null);
+
   // État de création tactile par glissement (Touch-and-Drag)
   const [dragCreation, setDragCreation] = useState<{
     day: Date;
@@ -200,7 +209,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   }, [days, events, hourHeight, resizingEvent]);
 
   // --------------------------------------------------------------------------
-  // GESTION TACTILE IPAD : CRÉATION AU DOIGT / APPLE PENCIL PAR GLISSER (DRAG)
+  // GESTION TACTILE : DOUBLE-TAP PUIS GLISSER POUR CRÉER, SCROLL VERTICAL FLUIDE
   // --------------------------------------------------------------------------
   const handleSlotPointerDown = (e: React.PointerEvent<HTMLDivElement>, day: Date) => {
     // Si clic sur carte d'événement ou poignée, laisser faire l'événement
@@ -214,20 +223,65 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     const clickY = e.clientY - rect.top;
     const exactMinutes = (clickY / hourHeight) * 60;
     const snappedMinutes = Math.min(1435, Math.max(0, Math.floor(exactMinutes / 5) * 5));
+    const dayKey = format(day, 'yyyy-MM-dd');
+    const now = Date.now();
 
-    // Capture du pointeur pour iPad
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Cas 1 : Souris sur ordinateur (Desktop) : clic-glisser direct
+    if (e.pointerType === 'mouse') {
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
 
-    setDragCreation({
-      day,
-      startMinutes: snappedMinutes,
-      currentMinutes: snappedMinutes + 60, // 1h par défaut
-      startY: e.clientY,
-      isDragging: false,
-    });
+      setDragCreation({
+        day,
+        startMinutes: snappedMinutes,
+        currentMinutes: snappedMinutes + 60, // 1h par défaut
+        startY: e.clientY,
+        isDragging: false,
+      });
+      return;
+    }
+
+    // Cas 2 : Tactile (Doigt / Apple Pencil) :
+    // On vérifie s'il s'agit du DEUXIÈME tap d'un double-tap
+    const lastTap = lastTouchTapRef.current;
+    const isDoubleTap =
+      lastTap &&
+      now - lastTap.time < 420 &&
+      Math.abs(e.clientX - lastTap.x) < 40 &&
+      Math.abs(e.clientY - lastTap.y) < 40 &&
+      lastTap.dayKey === dayKey;
+
+    if (isDoubleTap) {
+      // DOUBLE-TAP : l'étudiant veut créer un créneau en descendant le doigt !
+      lastTouchTapRef.current = null;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
+
+      const startMin = lastTap.slotMinutes ?? snappedMinutes;
+      setDragCreation({
+        day,
+        startMinutes: startMin,
+        currentMinutes: startMin + 60,
+        startY: e.clientY,
+        isDragging: true,
+      });
+    } else {
+      // TOUCHER SIMPLE : On NE capture PAS le pointeur et on NE crée PAS de dragCreation.
+      // Cela permet au navigateur de faire défiler naturellement l'emploi du temps (monter / descendre).
+      lastTouchTapRef.current = {
+        time: now,
+        x: e.clientX,
+        y: e.clientY,
+        dayKey,
+        slotMinutes: snappedMinutes,
+      };
+    }
   };
 
   const handleSlotPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Si pas de création active (c-à-d simple défilement vertical au doigt), on laisse défiler
     if (!dragCreation) return;
 
     const deltaY = e.clientY - dragCreation.startY;
@@ -248,30 +302,49 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   };
 
   const handleSlotPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragCreation) return;
+    // Si création active (double-tap glissé tactile ou clic-glissé souris)
+    if (dragCreation) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
 
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {}
+      const { day, startMinutes, currentMinutes, isDragging } = dragCreation;
+      setDragCreation(null);
 
-    const { day, startMinutes, currentMinutes, isDragging } = dragCreation;
-    setDragCreation(null);
+      const startHours = Math.floor(startMinutes / 60);
+      const startMins = startMinutes % 60;
+      const startTime = setMinutes(setHours(day, startHours), startMins);
 
-    const startHours = Math.floor(startMinutes / 60);
-    const startMins = startMinutes % 60;
-    const startTime = setMinutes(setHours(day, startHours), startMins);
+      let endTime: Date;
+      if (isDragging && currentMinutes > startMinutes) {
+        const endHours = Math.floor(currentMinutes / 60);
+        const endMins = currentMinutes % 60;
+        endTime = setMinutes(setHours(day, endHours), endMins);
+      } else {
+        // Double-tap sans glisser : 1h par défaut
+        endTime = addMinutes(startTime, 60);
+      }
 
-    let endTime: Date;
-    if (isDragging && currentMinutes > startMinutes) {
-      const endHours = Math.floor(currentMinutes / 60);
-      const endMins = currentMinutes % 60;
-      endTime = setMinutes(setHours(day, endHours), endMins);
-    } else {
-      // Tap simple : 1h30 par défaut
-      endTime = addMinutes(startTime, 90);
+      onSelectSlot(startTime, endTime);
+      return;
     }
 
-    onSelectSlot(startTime, endTime);
+    // Si clic simple à la souris sur PC sans glisser
+    if (e.pointerType === 'mouse') {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickY = e.clientY - rect.top;
+      const exactMinutes = (clickY / hourHeight) * 60;
+      const snappedMinutes = Math.min(1435, Math.max(0, Math.floor(exactMinutes / 5) * 5));
+      const startHours = Math.floor(snappedMinutes / 60);
+      const startMins = snappedMinutes % 60;
+      const dayKey = e.currentTarget.getAttribute('data-daykey');
+      const targetDay = days.find((d) => format(d, 'yyyy-MM-dd') === dayKey);
+      if (targetDay) {
+        const startTime = setMinutes(setHours(targetDay, startHours), startMins);
+        const endTime = addMinutes(startTime, 60);
+        onSelectSlot(startTime, endTime);
+      }
+    }
   };
 
   // --------------------------------------------------------------------------
@@ -499,11 +572,12 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
             return (
               <div
                 key={dayKey}
+                data-daykey={dayKey}
                 onPointerDown={(e) => handleSlotPointerDown(e, day)}
                 onPointerMove={handleSlotPointerMove}
                 onPointerUp={handleSlotPointerUp}
                 className={clsx(
-                  'relative h-full transition-colors cursor-crosshair group/cell touch-none',
+                  'relative h-full transition-colors cursor-crosshair group/cell touch-pan-y',
                   today ? 'bg-indigo-50/15' : 'hover:bg-slate-50/40'
                 )}
                 style={{ height: TOTAL_HOURS * hourHeight }}
