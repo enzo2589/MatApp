@@ -15,13 +15,32 @@ import { TimetableImportModal } from './components/TimetableImportModal';
 import { cleanAllDuplicateAndDemoEvents } from './services/timetableImporter';
 import { AlarmBanner } from './components/AlarmBanner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CalendarCheck, CalendarDays, CheckSquare, Sparkles, Activity } from 'lucide-react';
+import { CalendarCheck, CalendarDays, CheckSquare, Sparkles, Calendar } from 'lucide-react';
 import { clsx } from 'clsx';
 import { User } from '@supabase/supabase-js';
 
+// Récupération instantanée de la session sauvegardée en local (aucun besoin de se reconnecter)
+function getInitialAuth(): { state: 'authenticated' | 'unauthenticated' | 'loading'; user: User | null } {
+  try {
+    const saved =
+      localStorage.getItem('matapp_user') ||
+      localStorage.getItem('matapp_current_user') ||
+      localStorage.getItem('medagenda_current_user');
+
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed?.id) {
+        return { state: 'authenticated', user: parsed as User };
+      }
+    }
+  } catch {}
+  return { state: 'unauthenticated', user: null };
+}
+
 export function App() {
-  const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'guest' | 'unauthenticated'>('loading');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const initialAuth = getInitialAuth();
+  const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>(initialAuth.state);
+  const [currentUser, setCurrentUser] = useState<User | null>(initialAuth.user);
 
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -29,41 +48,51 @@ export function App() {
   const [isMobileTodoOpen, setIsMobileTodoOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'calendar' | 'sidebar' | 'todo'>('calendar');
 
-  // Vérification de l'authentification et initialisation au démarrage
+  // Initialisation et vérification de la session en arrière-plan
   useEffect(() => {
     seedInitialMedicalDataIfEmpty();
     cleanAllDuplicateAndDemoEvents();
     alarmService.startAlarmLoop();
 
-    const isGuest = localStorage.getItem('medagenda_guest_mode') === 'true';
-
-    // Vérifier la session Supabase existante
+    // Vérifier la session Supabase active en arrière-plan
     getAuthUser().then((user) => {
       if (user) {
         setCurrentUser(user);
         setAuthState('authenticated');
-        localStorage.setItem('medagenda_current_user', JSON.stringify({ id: user.id, email: user.email }));
-        syncEngine.init();
-      } else if (isGuest) {
-        setAuthState('guest');
+        const userObj = { id: user.id, email: user.email };
+        localStorage.setItem('matapp_user', JSON.stringify(userObj));
+        localStorage.setItem('matapp_current_user', JSON.stringify(userObj));
         syncEngine.init();
       } else {
-        setAuthState('unauthenticated');
+        const saved =
+          localStorage.getItem('matapp_user') ||
+          localStorage.getItem('matapp_current_user') ||
+          localStorage.getItem('medagenda_current_user');
+
+        if (!saved) {
+          setAuthState('unauthenticated');
+        } else {
+          syncEngine.init();
+        }
       }
     });
 
-    // Écouter les changements de session en temps réel
+    // Écouter les changements d'authentification en direct
     const unsub = onAuthStateChange((event, session) => {
       if (session?.user) {
         setCurrentUser(session.user);
         setAuthState('authenticated');
-        localStorage.setItem('medagenda_current_user', JSON.stringify({ id: session.user.id, email: session.user.email }));
-        localStorage.removeItem('medagenda_guest_mode');
+        const userObj = { id: session.user.id, email: session.user.email };
+        localStorage.setItem('matapp_user', JSON.stringify(userObj));
+        localStorage.setItem('matapp_current_user', JSON.stringify(userObj));
         syncEngine.setupRealtimeSubscription();
         syncEngine.triggerSync();
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setAuthState('unauthenticated');
+        localStorage.removeItem('matapp_user');
+        localStorage.removeItem('matapp_current_user');
+        localStorage.removeItem('medagenda_current_user');
       }
     });
 
@@ -88,10 +117,12 @@ export function App() {
   const handleAuthSuccess = async (user: User) => {
     setCurrentUser(user);
     setAuthState('authenticated');
-    localStorage.setItem('medagenda_current_user', JSON.stringify({ id: user.id, email: user.email }));
-    localStorage.removeItem('medagenda_guest_mode');
+    const userObj = { id: user.id, email: user.email };
+    localStorage.setItem('matapp_user', JSON.stringify(userObj));
+    localStorage.setItem('matapp_current_user', JSON.stringify(userObj));
+    localStorage.setItem('medagenda_current_user', JSON.stringify(userObj));
 
-    // Migration des éléments locaux vers le compte de l'étudiant
+    // Migration des éléments créés localement vers le compte de l'étudiant
     try {
       await db.events.where('user_id').equals(LOCAL_USER_ID).modify({
         user_id: user.id,
@@ -110,41 +141,33 @@ export function App() {
     syncEngine.triggerSync();
   };
 
-  const handleContinueAsGuest = () => {
-    localStorage.setItem('medagenda_guest_mode', 'true');
-    setAuthState('guest');
-    syncEngine.init();
-  };
-
   const handleSignOut = async () => {
     await signOutUser();
+    localStorage.removeItem('matapp_user');
+    localStorage.removeItem('matapp_current_user');
+    localStorage.removeItem('medagenda_current_user');
     setCurrentUser(null);
     setAuthState('unauthenticated');
   };
 
-  // 1. Écran de chargement ultra-court au boot
+  // 1. Écran de chargement ultra-court
   if (authState === 'loading') {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white select-none">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center shadow-xl shadow-indigo-500/25 animate-pulse mb-3">
-          <Activity className="w-7 h-7 stroke-[2.5]" />
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50 text-slate-800 select-none">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20 animate-pulse mb-3">
+          <Calendar className="w-6 h-6 stroke-[2.2]" />
         </div>
-        <p className="text-xs font-bold text-slate-400 tracking-wider uppercase">Chargement de MedAgenda...</p>
+        <p className="text-xs font-semibold text-slate-500">Chargement de MatApp...</p>
       </div>
     );
   }
 
-  // 2. Écran d'accueil de Connexion / Inscription si non connecté
+  // 2. Écran de Connexion / Inscription sobre pour les étudiants
   if (authState === 'unauthenticated') {
-    return (
-      <AuthPage
-        onSuccess={handleAuthSuccess}
-        onContinueAsGuest={handleContinueAsGuest}
-      />
-    );
+    return <AuthPage onSuccess={handleAuthSuccess} />;
   }
 
-  // 3. Application principale complète
+  // 3. Application principale MatApp
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-100/80 overflow-hidden font-sans">
       {/* Bannière d'Alarme Prioritaire Flottante */}
@@ -155,7 +178,7 @@ export function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTodoList={() => setIsMobileTodoOpen(true)}
         pendingTasksCount={pendingTasksCount}
-        userEmail={currentUser?.email || (authState === 'guest' ? 'Invité (Local)' : null)}
+        userEmail={currentUser?.email || null}
         onSignOut={handleSignOut}
       />
 
@@ -211,7 +234,7 @@ export function App() {
 
       {/* Zone Principale Responsive */}
       <main className="flex-1 flex overflow-hidden relative">
-        {/* PANNEAU GAUCHE (Desktop / iPad : colonne permanente) */}
+        {/* PANNEAU GAUCHE (Desktop / iPad) */}
         <aside
           className={clsx(
             'w-full md:w-[330px] lg:w-[360px] xl:w-[380px] h-full flex flex-col p-3 gap-3 overflow-y-auto bg-slate-100/90 border-r border-slate-200/90 shrink-0 select-none scrollbar-thin',

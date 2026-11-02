@@ -214,6 +214,7 @@ export async function signOutUser(): Promise<void> {
       console.warn('Erreur lors du signOut Supabase', e);
     }
   }
+  localStorage.removeItem('matapp_current_user');
   localStorage.removeItem('medagenda_current_user');
   localStorage.removeItem('medagenda_guest_mode');
 }

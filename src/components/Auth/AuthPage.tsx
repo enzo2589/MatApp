@@ -1,17 +1,14 @@
 import React, { useState } from 'react';
 import {
-  Activity,
+  CalendarDays,
   Mail,
   Lock,
-  User,
-  ArrowRight,
+  User as UserIcon,
   Eye,
   EyeOff,
   AlertCircle,
   CheckCircle2,
-  Sparkles,
-  ShieldCheck,
-  GraduationCap,
+  ArrowRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { signInWithEmail, signUpWithEmail } from '../../services/supabaseClient';
@@ -19,14 +16,10 @@ import { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface AuthPageProps {
   onSuccess: (user: SupabaseUser) => void;
-  onContinueAsGuest: () => void;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({
-  onSuccess,
-  onContinueAsGuest,
-}) => {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
+  const [tab, setTab] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -52,13 +45,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
-    if (mode === 'register') {
+    if (tab === 'register') {
       if (password.length < 6) {
         setErrorMsg('Le mot de passe doit comporter au moins 6 caractères.');
         return;
       }
       if (password !== confirmPassword) {
-        setErrorMsg('Les mots de passe ne correspondent pas.');
+        setErrorMsg('Les mots de passe ne sont pas identiques.');
         return;
       }
     }
@@ -66,7 +59,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setIsLoading(true);
 
     try {
-      if (mode === 'login') {
+      if (tab === 'login') {
         const res = await signInWithEmail(cleanEmail, password);
         if (res.error) {
           setErrorMsg(res.error);
@@ -83,7 +76,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         } else if (res.user) {
           if (res.needsEmailConfirmation) {
             setInfoMsg(
-              'Compte créé avec succès ! Un email de confirmation a été envoyé à votre adresse. Cliquez sur le lien pour valider votre compte.'
+              'Compte créé avec succès ! Un email de confirmation vous a été envoyé. Cliquez sur le lien pour valider votre compte.'
             );
           } else {
             onSuccess(res.user);
@@ -91,56 +84,44 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         }
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Une erreur inattendue est survenue.');
+      setErrorMsg(err.message || 'Une erreur est survenue lors de la connexion.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4 sm:p-6 select-none relative overflow-hidden">
-      {/* Halos lumineux de fond style Apple */}
-      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.3 }}
-        className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100/90 overflow-hidden relative z-10 flex flex-col"
-      >
-        {/* En-tête de la carte */}
-        <div className="px-6 pt-7 pb-5 text-center bg-gradient-to-b from-slate-50 to-white border-b border-slate-100">
-          <div className="inline-flex items-center justify-center w-13 h-13 rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-500 text-white shadow-lg shadow-indigo-500/25 mb-3">
-            <Activity className="w-7 h-7 stroke-[2.5]" />
+    <div className="min-h-screen w-screen bg-slate-50 flex flex-col justify-center items-center p-4 sm:p-6 select-none font-sans">
+      <div className="w-full max-w-sm">
+        {/* Logo & Titre sobre et professionnel */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20 mb-3">
+            <CalendarDays className="w-6 h-6 stroke-[2.2]" />
           </div>
 
-          <div className="flex items-center justify-center gap-2">
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-              MedAgenda
-            </h1>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
-              Études Santé
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto font-medium">
-            Emploi du temps médical, révisions, stages et to-do list synchronisés
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+            MatApp
+          </h1>
+          <p className="text-sm text-slate-500 mt-1 font-medium">
+            Emploi du temps & organisation étudiante
           </p>
+        </div>
 
-          {/* Onglets Connexion / Inscription */}
-          <div className="mt-5 grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold">
+        {/* Carte principale */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xl shadow-slate-200/40 p-6 sm:p-7">
+          {/* Sélecteur d'onglets (Connexion / Inscription) */}
+          <div className="flex bg-slate-100 p-1 rounded-xl mb-5 text-xs font-semibold">
             <button
               type="button"
               onClick={() => {
-                setMode('login');
+                setTab('login');
                 setErrorMsg(null);
                 setInfoMsg(null);
               }}
-              className={`py-2 rounded-lg transition-all ${
-                mode === 'login'
-                  ? 'bg-white text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+              className={`flex-1 py-2 rounded-lg transition-all ${
+                tab === 'login'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               Se connecter
@@ -148,42 +129,40 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <button
               type="button"
               onClick={() => {
-                setMode('register');
+                setTab('register');
                 setErrorMsg(null);
                 setInfoMsg(null);
               }}
-              className={`py-2 rounded-lg transition-all ${
-                mode === 'register'
-                  ? 'bg-white text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+              className={`flex-1 py-2 rounded-lg transition-all ${
+                tab === 'register'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               Créer un compte
             </button>
           </div>
-        </div>
 
-        {/* Corps du Formulaire */}
-        <div className="p-6 space-y-4">
+          {/* Messages d'erreur ou d'information */}
           <AnimatePresence mode="wait">
             {errorMsg && (
               <motion.div
-                initial={{ opacity: 0, y: -8 }}
+                initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-800"
+                exit={{ opacity: 0, y: -6 }}
+                className="mb-4 p-3 bg-red-50 border border-red-200/80 rounded-xl flex items-start gap-2.5 text-xs text-red-700"
               >
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                 <span>{errorMsg}</span>
               </motion.div>
             )}
 
             {infoMsg && (
               <motion.div
-                initial={{ opacity: 0, y: -8 }}
+                initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-800"
+                exit={{ opacity: 0, y: -6 }}
+                className="mb-4 p-3 bg-emerald-50 border border-emerald-200/80 rounded-xl flex items-start gap-2.5 text-xs text-emerald-800"
               >
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <span>{infoMsg}</span>
@@ -191,30 +170,31 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             )}
           </AnimatePresence>
 
-          <form onSubmit={handleSubmit} className="space-y-3.5">
-            {/* Champ Nom (si inscription) */}
-            {mode === 'register' && (
+          {/* Formulaire */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Nom complet si inscription */}
+            {tab === 'register' && (
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Prénom & Nom (Optionnel)
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Prénom ou nom (optionnel)
                 </label>
                 <div className="relative flex items-center">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+                  <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Ex: Alexandre Martin"
-                    className="w-full pl-9 pr-3.5 py-2 text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-400"
+                    placeholder="Alexandre"
+                    className="w-full pl-9 pr-3.5 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all placeholder:text-slate-400"
                   />
                 </div>
               </div>
             )}
 
-            {/* Champ Email */}
+            {/* Email */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Adresse Email Universitaire ou Personnelle
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Adresse email
               </label>
               <div className="relative flex items-center">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
@@ -223,17 +203,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="etudiant@univ-sante.fr"
-                  className="w-full pl-9 pr-3.5 py-2 text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-400"
+                  placeholder="nom@exemple.fr"
+                  className="w-full pl-9 pr-3.5 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all placeholder:text-slate-400"
                 />
               </div>
             </div>
 
-            {/* Champ Mot de passe */}
+            {/* Mot de passe */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Mot de Passe {mode === 'register' && '(min. 6 caractères)'}
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Mot de passe
+                </label>
+                {tab === 'register' && (
+                  <span className="text-[11px] text-slate-400">min. 6 caractères</span>
+                )}
+              </div>
               <div className="relative flex items-center">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
                 <input
@@ -242,7 +227,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-9 pr-10 py-2 text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-400"
+                  className="w-full pl-9 pr-10 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all placeholder:text-slate-400"
                 />
                 <button
                   type="button"
@@ -255,11 +240,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </div>
             </div>
 
-            {/* Confirmation Mot de passe (si inscription) */}
-            {mode === 'register' && (
+            {/* Confirmation mot de passe */}
+            {tab === 'register' && (
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Confirmer le Mot de Passe
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Confirmer le mot de passe
                 </label>
                 <div className="relative flex items-center">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
@@ -269,68 +254,40 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-3.5 py-2 text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-400"
+                    className="w-full pl-9 pr-3.5 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all placeholder:text-slate-400"
                   />
                 </div>
               </div>
             )}
 
-            {/* Bouton de Soumission Principal */}
+            {/* Bouton d'action */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white rounded-xl text-xs font-extrabold shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Traitement en cours...</span>
+                  <span>Chargement...</span>
                 </>
               ) : (
                 <>
                   <span>
-                    {mode === 'login' ? 'Accéder à mon agenda' : 'Créer mon compte étudiant'}
+                    {tab === 'login' ? 'Se connecter' : 'Créer mon compte'}
                   </span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
-
-          {/* Séparateur */}
-          <div className="relative flex items-center justify-center my-3">
-            <div className="border-t border-slate-200 w-full" />
-            <span className="bg-white px-3 text-[11px] text-slate-400 font-medium uppercase tracking-wider">
-              ou
-            </span>
-          </div>
-
-          {/* Bouton Continuer sans compte (Mode Local / Démo) */}
-          <button
-            type="button"
-            onClick={onContinueAsGuest}
-            className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200/70 active:scale-[0.99] text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border border-slate-200/80"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Continuer sans compte (Mode Local)</span>
-          </button>
-          <p className="text-[10px] text-center text-slate-400">
-            0 ms de latence • Vos données restent enregistrées dans votre navigateur
-          </p>
         </div>
 
-        {/* Pied de page informatif */}
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-medium">
-          <span className="flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-emerald-600" />
-            Supabase Cloud Sécurisé
-          </span>
-          <span className="flex items-center gap-1">
-            <GraduationCap className="w-3 h-3 text-indigo-600" />
-            Médecine • PASS • LAS
-          </span>
-        </div>
-      </motion.div>
+        {/* Mention discrète en bas */}
+        <p className="text-center text-xs text-slate-400 mt-5 font-medium">
+          MatApp • Vos données restent synchronisées et privées
+        </p>
+      </div>
     </div>
   );
 };

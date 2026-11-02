@@ -46,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
       if (granted) {
         if (typeof window !== 'undefined' && 'Notification' in window) {
           try {
-            new Notification('🔔 Rappels MedAgenda Activés', {
+            new Notification('🔔 Rappels MatApp Activés', {
               body: 'Vos alertes de cours, révisions et alarmes sonores sont prêtes !',
               icon: '/favicon.svg',
             });
@@ -77,14 +77,14 @@ export const Header: React.FC<HeaderProps> = ({
         <div>
           <div className="flex items-center gap-1.5">
             <h1 className="text-base font-extrabold text-slate-900 tracking-tight">
-              MedAgenda
+              MatApp
             </h1>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
               Études Santé
             </span>
           </div>
           <p className="hidden sm:block text-[11px] text-slate-500 font-medium">
-            Emploi du Temps Étudiant en Médecine • Cours, Révisions, Stages & Repos
+            Emploi du Temps Étudiant • Cours, Révisions, Stages & Repos
           </p>
         </div>
       </div>
