@@ -15,13 +15,14 @@ import {
 import {
   ParsedCourseEvent,
   PASS_LILLE_WEEK_43_COURSES,
-  extractTextFromPDF,
+  parsePDFTimetable,
   parseTimetableText,
   parseICS,
   importCoursesToDatabase,
 } from '../services/timetableImporter';
 import { alarmService } from '../services/alarmService';
-import { parseISO } from 'date-fns';
+import { parseISO, format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import { clsx } from 'clsx';
 
 interface TimetableImportModalProps {
@@ -35,7 +36,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
   onClose,
   onImportSuccess,
 }) => {
-  const [courses, setCourses] = useState<ParsedCourseEvent[]>(PASS_LILLE_WEEK_43_COURSES);
+  const [courses, setCourses] = useState<ParsedCourseEvent[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -56,7 +57,14 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
     try {
       const fileName = file.name.toLowerCase();
 
-      if (fileName.endsWith('.ics')) {
+      if (fileName.endsWith('.pdf')) {
+        setProcessingStatus('Analyse du PDF et détection des cours...');
+        const parsed = await parsePDFTimetable(file);
+        if (parsed.length === 0) {
+          throw new Error('Aucun cours détecté dans ce document PDF. Vérifiez qu’il s’agit bien d’un emploi du temps.');
+        }
+        setCourses(parsed);
+      } else if (fileName.endsWith('.ics')) {
         setProcessingStatus('Analyse du fichier .ics...');
         const text = await file.text();
         const parsed = parseICS(text);
@@ -64,17 +72,8 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
           throw new Error('Aucun cours trouvé dans ce fichier .ics.');
         }
         setCourses(parsed);
-      } else if (fileName.endsWith('.pdf')) {
-        setProcessingStatus('Extraction du texte PDF...');
-        const text = await extractTextFromPDF(file);
-        setProcessingStatus('Reconnaissance des cours et horaires...');
-        const parsed = parseTimetableText(text);
-        if (parsed.length === 0) {
-          throw new Error('Aucun cours détecté dans ce PDF.');
-        }
-        setCourses(parsed);
       } else {
-        setProcessingStatus('Analyse du contenu...');
+        setProcessingStatus('Analyse du document...');
         const text = await file.text().catch(() => '');
         const parsed = parseTimetableText(text);
         if (parsed.length === 0) {
@@ -85,7 +84,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
     } catch (err: any) {
       console.error('Erreur import:', err);
       setErrorMessage(
-        err.message || "Impossible de lire ce document. L'emploi du temps PASS Lille officiel reste disponible ci-dessous."
+        err.message || "Impossible de lire ce document. Vérifiez le format de votre fichier."
       );
     } finally {
       setIsProcessing(false);
@@ -109,7 +108,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
     }
   };
 
-  // Recharger l'emploi du temps PASS Lille S43
+  // Recharger l'emploi du temps PASS Lille S43 en exemple si besoin
   const handleLoadPassLille = () => {
     setCourses(PASS_LILLE_WEEK_43_COURSES);
     setErrorMessage(null);
@@ -133,7 +132,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
       // Date du premier cours pour y naviguer automatiquement
       const firstCourseDate = courses[0]?.startTime
         ? parseISO(courses[0].startTime)
-        : new Date(2026, 9, 19);
+        : new Date();
 
       setTimeout(() => {
         setIsSuccess(false);
@@ -168,7 +167,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                 Importer l'Emploi du Temps
               </h3>
               <p className="text-xs text-slate-500 font-medium">
-                Glissez votre planning ou chargez le modèle PASS
+                Déposez votre planning de la semaine pour l'intégrer automatiquement
               </p>
             </div>
           </div>
@@ -195,7 +194,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                 {importedCount} cours intégrés avec succès !
               </h4>
               <p className="text-xs text-slate-500 max-w-xs">
-                Redirection automatique vers votre semaine du 19 octobre 2026...
+                {courses[0]?.startTime ? `Affichage de votre semaine du ${format(parseISO(courses[0].startTime), 'd MMMM yyyy', { locale: fr })}...` : 'Redirection vers votre agenda...'}
               </p>
             </div>
           ) : (
@@ -227,7 +226,7 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.ics,.txt,image/*"
+                  accept=".pdf,.ics,.txt"
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -238,10 +237,10 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
 
                 <div>
                   <p className="text-xs font-bold text-slate-800">
-                    Déposez votre PDF universitaire ou fichier .ics
+                    Déposez votre planning PDF ou fichier .ics
                   </p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    ou cliquez pour parcourir vos fichiers
+                    ou touchez pour sélectionner votre fichier
                   </p>
                 </div>
 
@@ -253,18 +252,8 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                 )}
               </div>
 
-              {/* Bouton de chargement rapide PASS Lille S43 */}
-              <button
-                type="button"
-                onClick={handleLoadPassLille}
-                className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200/80 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-98"
-              >
-                <Sparkles className="w-4 h-4 text-indigo-600" />
-                <span>Charger le planning officiel PASS Lille (Semaine 43)</span>
-              </button>
-
-              {/* Résumé compact des cours prêts */}
-              {courses.length > 0 && (
+              {/* Résumé des cours détectés */}
+              {courses.length > 0 ? (
                 <div className="p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0">
@@ -272,10 +261,10 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                     </div>
                     <div>
                       <h5 className="text-xs font-extrabold text-slate-900">
-                        {courses.length} cours prêts à être ajoutés
+                        {courses.length} cours détectés
                       </h5>
                       <p className="text-[11px] text-slate-500 font-medium">
-                        Semaine du 19 au 23 oct 2026 • Blocs de 2h continus
+                        Semaine du {format(parseISO(courses[0].startTime), 'd MMMM yyyy', { locale: fr })}
                       </p>
                     </div>
                   </div>
@@ -289,6 +278,15 @@ export const TimetableImportModal: React.FC<TimetableImportModalProps> = ({
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleLoadPassLille}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-700 border border-slate-200/60 font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Charger le modèle d'exemple PASS (Semaine 43)</span>
+                </button>
               )}
             </>
           )}

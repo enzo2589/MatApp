@@ -239,17 +239,248 @@ export function mergeConsecutiveCourses(courses: ParsedCourseEvent[]): ParsedCou
   return merged;
 }
 
+const FRENCH_MONTHS: Record<string, number> = {
+  janvier: 0, janv: 0, fevrier: 1, 'février': 1,
+  mars: 2, avril: 3, avr: 3, mai: 4, juin: 5, juillet: 6, juil: 6,
+  aout: 7, 'août': 7, septembre: 8, sept: 8, octobre: 9, oct: 9,
+  novembre: 10, nov: 10, decembre: 11, 'décembre': 11
+};
+
 /**
- * Extraction de texte d'un fichier PDF directement dans le navigateur
+ * Parseur 2D haute précision pour grilles d'emplois du temps universitaires (PASS Lille & autres)
+ * Extrait dynamiquement les vraies dates, heures, matières et professeurs de la semaine téléchargée
+ */
+function parse2DGridCourses(items: { text: string; x: number; y: number }[]): ParsedCourseEvent[] {
+  if (items.length < 5) return [];
+
+  // Détection de l'année de l'emploi du temps
+  let detectedYear = new Date().getFullYear();
+  for (const it of items) {
+    const yM = it.text.match(/\b(202[4-9])\b/);
+    if (yM) {
+      detectedYear = parseInt(yM[1], 10);
+      break;
+    }
+  }
+
+  // Détection des colonnes de jours avec leurs vraies dates (ex: "lundi 26 octobre 2026")
+  const dayRegex = /(lundi|mardi|mercredi|jeudi|vendredi|samedi)\s+(\d{1,2})\s+([a-zéû.]+)(?:\s+(\d{4}))?/i;
+  const dayMatches: { dayName: string; dayNum: number; monthIdx: number; year: number; x: number; y: number }[] = [];
+
+  for (const it of items) {
+    const m = it.text.match(dayRegex);
+    if (m) {
+      const dName = m[1].toLowerCase();
+      const dNum = parseInt(m[2], 10);
+      const mName = m[3].toLowerCase();
+      const yr = m[4] ? parseInt(m[4], 10) : detectedYear;
+      const monthIdx = FRENCH_MONTHS[mName] !== undefined ? FRENCH_MONTHS[mName] : new Date().getMonth();
+      dayMatches.push({ dayName: dName, dayNum: dNum, monthIdx, year: yr, x: it.x, y: it.y });
+    }
+  }
+
+  if (dayMatches.length === 0) return [];
+
+  // Identifier la ligne d'en-tête principale des jours (groupe avec le plus de jours sur la même hauteur Y)
+  const yCounts: Record<number, number> = {};
+  for (const d of dayMatches) {
+    const roundedY = Math.round(d.y / 25) * 25;
+    yCounts[roundedY] = (yCounts[roundedY] || 0) + 1;
+  }
+  const headerY = parseInt(Object.keys(yCounts).sort((a, b) => yCounts[Number(b)] - yCounts[Number(a)])[0], 10);
+  const headerDays = dayMatches.filter((d) => Math.abs(d.y - headerY) < 35);
+  headerDays.sort((a, b) => a.x - b.x);
+
+  if (headerDays.length === 0) return [];
+
+  // Calcul des délimitations horizontales de chaque colonne
+  const avgColWidth =
+    headerDays.length > 1
+      ? (headerDays[headerDays.length - 1].x - headerDays[0].x) / (headerDays.length - 1)
+      : 600;
+
+  const cols = headerDays.map((hd, i) => {
+    const prev = headerDays[i - 1];
+    const next = headerDays[i + 1];
+    const xMin = prev ? (prev.x + hd.x) / 2 : Math.max(0, hd.x - avgColWidth * 0.4);
+    const xMax = next ? (hd.x + next.x) / 2 : hd.x + avgColWidth * 0.6;
+    const isoDate = `${hd.year}-${String(hd.monthIdx + 1).padStart(2, '0')}-${String(hd.dayNum).padStart(2, '0')}`;
+    return { ...hd, xMin, xMax, isoDate };
+  });
+
+  // Détection des créneaux horaires (08h00-09h00, 10h00-11h00, etc.)
+  const timeRegex = /^(\d{1,2})[h:](\d{2})?\s*[-à]\s*(\d{1,2})[h:](\d{2})?$/i;
+  const timeItems = items.filter((it) => timeRegex.test(it.text));
+
+  const distinctRows: { y: number; startH: number; startM: number; endH: number; endM: number }[] = [];
+  for (const ti of timeItems) {
+    const m = ti.text.match(timeRegex);
+    if (!m) continue;
+    const startH = parseInt(m[1], 10);
+    const startM = m[2] ? parseInt(m[2], 10) : 0;
+    const endH = parseInt(m[3], 10);
+    const endM = m[4] ? parseInt(m[4], 10) : 0;
+
+    if (!distinctRows.some((r) => Math.abs(r.y - ti.y) < 25)) {
+      distinctRows.push({ y: ti.y, startH, startM, endH, endM });
+    }
+  }
+  distinctRows.sort((a, b) => b.y - a.y);
+
+  if (distinctRows.length === 0) return [];
+
+  const avgRowHeight =
+    distinctRows.length > 1
+      ? (distinctRows[0].y - distinctRows[distinctRows.length - 1].y) / (distinctRows.length - 1)
+      : 400;
+
+  const slots = distinctRows.map((r, i) => {
+    const next = distinctRows[i + 1];
+    const yMax = r.y + 15;
+    const yMin = next ? next.y + 15 : r.y - avgRowHeight * 0.9;
+    return { ...r, yMin, yMax };
+  });
+
+  const rawCourses: ParsedCourseEvent[] = [];
+
+  for (const col of cols) {
+    for (const slot of slots) {
+      const cellItems = items.filter((it) =>
+        it.x >= col.xMin &&
+        it.x < col.xMax &&
+        it.y >= slot.yMin &&
+        it.y < slot.yMax &&
+        !timeRegex.test(it.text) &&
+        it.text !== '---'
+      );
+
+      cellItems.sort((a, b) => b.y - a.y);
+      const lines = cellItems.map((it) => it.text);
+
+      if (lines.length > 0 && !lines[0].toLowerCase().includes('suivre les indications')) {
+        let bcc = '';
+        let prof = '';
+        const rawTitles: string[] = [];
+
+        for (const line of lines) {
+          if (/^BCC\d|^UE\d/i.test(line)) {
+            bcc = line;
+          } else if (
+            /^(Pr|Dr|M\.|Mme|Prof)\s+/i.test(line) ||
+            /Vincent\s+Deramecourt|Philippe\s+Derambure|Nicolas\s+Willand|Bertrand|Herteleer|Devinant/i.test(line)
+          ) {
+            prof = line;
+          } else if (line !== '---' && !/pass@univ-lille/i.test(line)) {
+            rawTitles.push(line);
+          }
+        }
+
+        const cleanTitles: string[] = [];
+        for (const t of rawTitles) {
+          if (!cleanTitles.some((ct) => ct.toLowerCase() === t.toLowerCase())) {
+            cleanTitles.push(t);
+          }
+        }
+
+        const title = cleanTitles.length > 0 ? cleanTitles.join(' : ') : bcc || 'Cours Faculté';
+        const subject = bcc ? bcc : 'Faculté de Médecine';
+
+        let color = 'cours';
+        const titleLower = title.toLowerCase();
+        if (
+          titleLower.includes('ssh') ||
+          titleLower.includes('anthropologie') ||
+          titleLower.includes('éthique') ||
+          titleLower.includes('tutorat')
+        ) {
+          color = 'tutorat';
+        } else if (titleLower.includes('stage') || titleLower.includes('clinique') || titleLower.includes('hôpital')) {
+          color = 'stage';
+        }
+
+        const startIso = new Date(Date.UTC(col.year, col.monthIdx, col.dayNum, slot.startH, slot.startM)).toISOString();
+        const endIso = new Date(Date.UTC(col.year, col.monthIdx, col.dayNum, slot.endH, slot.endM)).toISOString();
+
+        rawCourses.push({
+          id: `pass-${col.isoDate}-${slot.startH}`,
+          title,
+          subject,
+          professor: prof,
+          startTime: startIso,
+          endTime: endIso,
+          color,
+          category: 'Faculté',
+        });
+      }
+    }
+  }
+
+  return mergeConsecutiveCourses(rawCourses);
+}
+
+/**
+ * Extraction et analyse complète d'un PDF d'emploi du temps
+ * Lit directement le fichier uploadé et extrait les cours de la nouvelle semaine
+ */
+export async function parsePDFTimetable(file: File): Promise<ParsedCourseEvent[]> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfjsLib = await import('pdfjs-dist');
+    const pdfWorker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+    }
+
+    const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let allItems: { text: string; x: number; y: number }[] = [];
+    let fullText = '';
+
+    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+      const page = await pdfDoc.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageItems = textContent.items
+        .filter((item: any) => item.str && item.str.trim())
+        .map((item: any) => ({
+          text: item.str.trim(),
+          x: Math.round(item.transform[4]),
+          y: Math.round(item.transform[5]),
+        }));
+
+      allItems = allItems.concat(pageItems);
+      fullText += textContent.items.map((item: any) => item.str).join(' ') + '\n';
+    }
+
+    // 1. Analyse 2D haute fidélité (colonnes et créneaux)
+    const gridCourses = parse2DGridCourses(allItems);
+    if (gridCourses.length > 0) {
+      return gridCourses;
+    }
+
+    // 2. Repli : analyse textuelle ligne par ligne
+    const textCourses = parseTimetableText(fullText);
+    if (textCourses.length > 0) {
+      return textCourses;
+    }
+
+    return [];
+  } catch (err) {
+    console.error('Erreur lors de l’analyse du PDF:', err);
+    return [];
+  }
+}
+
+/**
+ * Extraction de texte de secours
  */
 export async function extractTextFromPDF(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const pdfjsLib = await import('pdfjs-dist');
+    const pdfWorker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
 
-    // Configurer le worker
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
     }
 
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
@@ -259,9 +490,7 @@ export async function extractTextFromPDF(file: File): Promise<string> {
     for (let i = 1; i <= pdfDoc.numPages; i++) {
       const page = await pdfDoc.getPage(i);
       const textContent = await page.getTextContent();
-      const pageStrings = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
+      const pageStrings = textContent.items.map((item: any) => item.str).join(' ');
       fullText += pageStrings + '\n';
     }
 
@@ -276,25 +505,11 @@ export async function extractTextFromPDF(file: File): Promise<string> {
 }
 
 /**
- * Parseur intelligent de texte d'emploi du temps médical (PASS / LAS / Médecine)
- * Avec fusion automatique des créneaux de 2h consécutifs
+ * Parseur textuel de secours pour formats atypiques
  */
 export function parseTimetableText(rawText: string, referenceMonday?: Date): ParsedCourseEvent[] {
-  const lower = rawText.toLowerCase();
-  const isPassLille =
-    lower.includes('pass') &&
-    (lower.includes('lundi 19 octobre') ||
-      lower.includes('lille') ||
-      lower.includes('notredame') ||
-      lower.includes('deplanque'));
-
-  if (isPassLille) {
-    return PASS_LILLE_WEEK_43_COURSES;
-  }
-
-  // Parseur générique basé sur les créneaux horaires
   const events: ParsedCourseEvent[] = [];
-  const baseDate = referenceMonday || new Date(2026, 9, 19);
+  const baseDate = referenceMonday || new Date();
 
   const timeRegex = /(\d{1,2})[h:](\d{2})?\s*[-à]\s*(\d{1,2})[h:](\d{2})?/gi;
 
@@ -351,7 +566,7 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
     return mergeConsecutiveCourses(events);
   }
 
-  return PASS_LILLE_WEEK_43_COURSES;
+  return [];
 }
 
 /**
@@ -477,7 +692,7 @@ export async function importCoursesToDatabase(
   const eventsToInsert: EventItem[] = courses.map((c) => {
     const safeTitleSlug = c.title.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 20).toLowerCase();
     const rawId = c.id || `pass-${c.startTime.slice(0, 13)}-${safeTitleSlug}`;
-    const deterministicUuid = stringToUuid(rawId);
+    const deterministicUuid = stringToUuid(`${userId}-${rawId}`);
 
     return {
       id: deterministicUuid,
