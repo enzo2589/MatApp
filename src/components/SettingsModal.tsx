@@ -80,8 +80,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         setCurrentUserEmail(res.user?.email || email);
         if (res.user?.id) {
           const newUserId = res.user.id;
-          localStorage.setItem('matapp_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
-          localStorage.setItem('medagenda_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
+          const userObj = JSON.stringify({ id: newUserId, email: res.user.email });
+          localStorage.setItem('matapp_user', userObj);
+          localStorage.setItem('matapp_current_user', userObj);
+          localStorage.setItem('medagenda_current_user', userObj);
 
           syncEngine.setupRealtimeSubscription();
           syncEngine.triggerSync();
@@ -95,8 +97,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         setAuthSuccess('Compte créé avec succès !');
         if (res.user?.id) {
           const newUserId = res.user.id;
-          localStorage.setItem('matapp_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
-          localStorage.setItem('medagenda_current_user', JSON.stringify({ id: newUserId, email: res.user.email }));
+          const userObj = JSON.stringify({ id: newUserId, email: res.user.email });
+          localStorage.setItem('matapp_user', userObj);
+          localStorage.setItem('matapp_current_user', userObj);
+          localStorage.setItem('medagenda_current_user', userObj);
 
           syncEngine.setupRealtimeSubscription();
           syncEngine.triggerSync();

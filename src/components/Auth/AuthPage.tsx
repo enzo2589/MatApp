@@ -20,7 +20,7 @@ interface AuthPageProps {
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [tab, setTab] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => localStorage.getItem('matapp_saved_email') || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -59,11 +59,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     setIsLoading(true);
 
     try {
+      localStorage.setItem('matapp_saved_email', cleanEmail);
+
       if (tab === 'login') {
         const res = await signInWithEmail(cleanEmail, password);
         if (res.error) {
           setErrorMsg(res.error);
         } else if (res.user) {
+          const userObj = { id: res.user.id, email: res.user.email };
+          localStorage.setItem('matapp_user', JSON.stringify(userObj));
+          localStorage.setItem('matapp_current_user', JSON.stringify(userObj));
+          localStorage.setItem('medagenda_current_user', JSON.stringify(userObj));
           onSuccess(res.user);
         }
       } else {
@@ -74,13 +80,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
         if (res.error) {
           setErrorMsg(res.error);
         } else if (res.user) {
-          if (res.needsEmailConfirmation) {
-            setInfoMsg(
-              'Compte créé avec succès ! Un email de confirmation vous a été envoyé. Cliquez sur le lien pour valider votre compte.'
-            );
-          } else {
-            onSuccess(res.user);
-          }
+          // Connexion directe et définitive : l'étudiant accède directement à son agenda
+          const loginRes = await signInWithEmail(cleanEmail, password);
+          const finalUser = loginRes.user || res.user;
+
+          const userObj = { id: finalUser.id, email: finalUser.email };
+          localStorage.setItem('matapp_user', JSON.stringify(userObj));
+          localStorage.setItem('matapp_current_user', JSON.stringify(userObj));
+          localStorage.setItem('medagenda_current_user', JSON.stringify(userObj));
+
+          onSuccess(finalUser);
         }
       }
     } catch (err: any) {

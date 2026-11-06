@@ -74,7 +74,7 @@ export function App() {
       }
     });
 
-    // Écouter les changements d'authentification en direct
+    // Écouter les changements d'authentification en direct (uniquement les connexions et rafraîchissements)
     const unsub = onAuthStateChange((event, session) => {
       if (session?.user) {
         setCurrentUser(session.user);
@@ -84,13 +84,9 @@ export function App() {
         localStorage.setItem('matapp_current_user', JSON.stringify(userObj));
         syncEngine.setupRealtimeSubscription();
         syncEngine.triggerSync();
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-        setAuthState('unauthenticated');
-        localStorage.removeItem('matapp_user');
-        localStorage.removeItem('matapp_current_user');
-        localStorage.removeItem('medagenda_current_user');
       }
+      // Note : On n'écoute pas l'événement passif SIGNED_OUT généré automatiquement par Supabase au démarrage
+      // La déconnexion est gérée de manière intentionnelle et explicite par la fonction handleSignOut()
     });
 
     return () => {

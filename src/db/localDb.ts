@@ -26,7 +26,10 @@ export const LOCAL_USER_ID = 'local-practitioner-user';
  */
 export function getCurrentUserId(): string {
   try {
-    const saved = localStorage.getItem('matapp_current_user') || localStorage.getItem('medagenda_current_user');
+    const saved =
+      localStorage.getItem('matapp_user') ||
+      localStorage.getItem('matapp_current_user') ||
+      localStorage.getItem('medagenda_current_user');
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed?.id) return parsed.id;
