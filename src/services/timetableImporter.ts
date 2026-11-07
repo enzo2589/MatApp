@@ -398,8 +398,8 @@ function parse2DGridCourses(items: { text: string; x: number; y: number }[]): Pa
           color = 'stage';
         }
 
-        const startIso = new Date(Date.UTC(col.year, col.monthIdx, col.dayNum, slot.startH, slot.startM)).toISOString();
-        const endIso = new Date(Date.UTC(col.year, col.monthIdx, col.dayNum, slot.endH, slot.endM)).toISOString();
+        const startIso = `${col.isoDate}T${String(slot.startH).padStart(2, '0')}:${String(slot.startM).padStart(2, '0')}:00`;
+        const endIso = `${col.isoDate}T${String(slot.endH).padStart(2, '0')}:${String(slot.endM).padStart(2, '0')}:00`;
 
         rawCourses.push({
           id: `pass-${col.isoDate}-${slot.startH}`,
@@ -504,59 +504,217 @@ export async function extractTextFromPDF(file: File): Promise<string> {
   }
 }
 
+function isNoiseLine(str: string): boolean {
+  const s = str.toLowerCase().trim();
+  if (s.length <= 1) return true;
+  if (/^(semaine|planning|emploi du temps|faculté|université|page|total|horaires?|amphi|salle|pass@univ)/i.test(s) && s.length < 35) return true;
+  if (s.includes('univ-lille') || s.includes('ade campus') || s.includes('authentification') || s.includes('déposez') || s.includes('importer')) return true;
+  return false;
+}
+
+const DAYS_KEYWORDS = [
+  { name: 'lundi', short: 'lun', dayOffset: 0 },
+  { name: 'mardi', short: 'mar', dayOffset: 1 },
+  { name: 'mercredi', short: 'mer', dayOffset: 2 },
+  { name: 'jeudi', short: 'jeu', dayOffset: 3 },
+  { name: 'vendredi', short: 'ven', dayOffset: 4 },
+  { name: 'samedi', short: 'sam', dayOffset: 5 },
+  { name: 'dimanche', short: 'dim', dayOffset: 6 },
+];
+
 /**
- * Parseur textuel de secours pour formats atypiques
+ * Parseur textuel intelligent pour textes extraits ou OCR de photos / captures d'écran
  */
 export function parseTimetableText(rawText: string, referenceMonday?: Date): ParsedCourseEvent[] {
   const events: ParsedCourseEvent[] = [];
-  const baseDate = referenceMonday || new Date();
+  const lines = rawText.split('\n').map((l) => l.trim()).filter(Boolean);
 
-  const timeRegex = /(\d{1,2})[h:](\d{2})?\s*[-à]\s*(\d{1,2})[h:](\d{2})?/gi;
-
-  const daysKeywords = [
-    { name: 'lundi', dayOffset: 0 },
-    { name: 'mardi', dayOffset: 1 },
-    { name: 'mercredi', dayOffset: 2 },
-    { name: 'jeudi', dayOffset: 3 },
-    { name: 'vendredi', dayOffset: 4 },
-    { name: 'samedi', dayOffset: 5 },
-  ];
-
-  const lines = rawText.split('\n');
-  let currentDayOffset = 0;
-
+  let detectedYear = new Date().getFullYear();
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+    const ym = line.match(/\b(202[4-9])\b/);
+    if (ym) {
+      detectedYear = parseInt(ym[1], 10);
+      break;
+    }
+  }
 
-    for (const d of daysKeywords) {
-      if (trimmed.toLowerCase().includes(d.name)) {
-        currentDayOffset = d.dayOffset;
-        break;
+  let currentMonday = referenceMonday ? new Date(referenceMonday) : null;
+
+  const weekRegex = /semaine(?:\s+du)?\s+(\d{1,2})\s+([a-zéû.]+)(?:\s+(\d{4}))?/i;
+  for (const line of lines) {
+    const wm = line.match(weekRegex);
+    if (wm) {
+      const d = parseInt(wm[1], 10);
+      const mName = wm[2].toLowerCase();
+      const y = wm[3] ? parseInt(wm[3], 10) : detectedYear;
+      const mIdx = FRENCH_MONTHS[mName] !== undefined ? FRENCH_MONTHS[mName] : new Date().getMonth();
+      const detectedDate = new Date(y, mIdx, d);
+      currentMonday = startOfWeek(detectedDate, { weekStartsOn: 1 });
+      break;
+    }
+  }
+
+  if (!currentMonday) {
+    currentMonday = startOfWeek(new Date(), { weekStartsOn: 1 });
+  }
+
+  const dayDates: Record<number, string> = {};
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(currentMonday, i);
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    dayDates[i] = `${yr}-${mo}-${da}`;
+  }
+
+  const dayHeaderRegex = /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|lun\.?|mar\.?|mer\.?|jeu\.?|ven\.?|sam\.?|dim\.?)(?:\s+(\d{1,2})(?:[\/\.-](\d{1,2})(?:[\/\.-](\d{2,4}))?|\s+([a-zéû.]+)(?:\s+(\d{4}))?)?)?/i;
+  const timeSlotRegex = /(\d{1,2})\s*[h:H]\s*(\d{2})?\s*(?:-|à|au|–|—)\s*(\d{1,2})\s*[h:H]\s*(\d{2})?/i;
+
+  let currentDayOffset = 0;
+  let lastConsumedIdx = -1;
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+
+    const dayMatch = line.match(dayHeaderRegex);
+    if (dayMatch) {
+      const rawName = dayMatch[1].toLowerCase().replace('.', '');
+      const dayKw = DAYS_KEYWORDS.find((d) => d.name === rawName || d.short === rawName);
+      if (dayKw) {
+        currentDayOffset = dayKw.dayOffset;
+
+        if (dayMatch[2]) {
+          const dayNum = parseInt(dayMatch[2], 10);
+          let monthIdx = currentMonday.getMonth();
+          let year = detectedYear;
+
+          if (dayMatch[5]) {
+            const mStr = dayMatch[5].toLowerCase();
+            if (FRENCH_MONTHS[mStr] !== undefined) {
+              monthIdx = FRENCH_MONTHS[mStr];
+            }
+            if (dayMatch[6]) year = parseInt(dayMatch[6], 10);
+          } else if (dayMatch[3]) {
+            monthIdx = parseInt(dayMatch[3], 10) - 1;
+            if (dayMatch[4]) year = parseInt(dayMatch[4].length === 2 ? '20' + dayMatch[4] : dayMatch[4], 10);
+          }
+
+          const yr = year;
+          const mo = String(monthIdx + 1).padStart(2, '0');
+          const da = String(dayNum).padStart(2, '0');
+          dayDates[currentDayOffset] = `${yr}-${mo}-${da}`;
+        }
       }
+      lastConsumedIdx = idx;
     }
 
-    let match: RegExpExecArray | null;
-    while ((match = timeRegex.exec(trimmed)) !== null) {
-      const startH = parseInt(match[1], 10);
-      const startM = match[2] ? parseInt(match[2], 10) : 0;
-      const endH = parseInt(match[3], 10);
-      const endM = match[4] ? parseInt(match[4], 10) : 0;
+    const timeMatch = line.match(timeSlotRegex);
+    if (timeMatch) {
+      const startH = parseInt(timeMatch[1], 10);
+      const startM = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+      const endH = parseInt(timeMatch[3], 10);
+      const endM = timeMatch[4] ? parseInt(timeMatch[4], 10) : 0;
 
-      const dayDate = addDays(baseDate, currentDayOffset);
-      const startIso = setMinutes(setHours(dayDate, startH), startM).toISOString();
-      const endIso = setMinutes(setHours(dayDate, endH), endM).toISOString();
+      if (startH < 6 || startH > 22 || endH < startH || endH > 23) continue;
 
-      const remainingText = trimmed.replace(match[0], '').trim();
-      const title = remainingText.length > 3 ? remainingText : 'Cours Magistral Faculté';
+      const dateStr = dayDates[currentDayOffset] || dayDates[0];
+      const startIso = `${dateStr}T${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}:00`;
+      const endIso = `${dateStr}T${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`;
+
+      let inlineText = line.replace(timeMatch[0], '').replace(/^[:\s-]+|[:\s-]+$/g, '').trim();
+
+      const surroundingCandidates: string[] = [];
+
+      // Ligne précédente si elle n'a pas été revendiquée par le créneau précédent
+      if (idx - 1 > lastConsumedIdx) {
+        const prevLine = lines[idx - 1];
+        if (!dayHeaderRegex.test(prevLine) && !timeSlotRegex.test(prevLine) && !isNoiseLine(prevLine)) {
+          surroundingCandidates.push(prevLine);
+        }
+      }
+
+      // Lignes suivantes (jusqu'à 3 lignes)
+      let nextConsumed = idx;
+      for (let nextOffset = 1; nextOffset <= 3 && idx + nextOffset < lines.length; nextOffset++) {
+        const targetIdx = idx + nextOffset;
+        const nextLine = lines[targetIdx];
+        if (dayHeaderRegex.test(nextLine) || timeSlotRegex.test(nextLine)) {
+          break;
+        }
+        if (!isNoiseLine(nextLine)) {
+          surroundingCandidates.push(nextLine);
+          nextConsumed = targetIdx;
+        }
+      }
+      lastConsumedIdx = Math.max(lastConsumedIdx, nextConsumed);
+
+      let title = inlineText;
+      let prof = '';
+      let subject = 'Faculté de Médecine';
+      let room = '';
+
+      // Extraction d'un professeur entre parenthèses dans le texte inline
+      const profInlineMatch = inlineText.match(/\((?:Pr|Dr|M\.|Mme|Prof)\.?\s*([^)]+)\)/i);
+      if (profInlineMatch) {
+        prof = profInlineMatch[0].replace(/[()]/g, '').trim();
+        title = inlineText.replace(profInlineMatch[0], '').trim();
+      }
+
+      for (const cand of surroundingCandidates) {
+        if (
+          /^(Pr|Dr|M\.|Mme|Prof)\s+/i.test(cand) ||
+          /Deramecourt|Derambure|Willand|Bertrand|Herteleer|Devinant|Deplanque/i.test(cand)
+        ) {
+          prof = cand;
+        } else if (/^BCC\d|^UE\d/i.test(cand)) {
+          subject = cand;
+        } else if (/^(Amphi|Salle|Bâtiment|Pole|Labo)\s+/i.test(cand)) {
+          room = cand;
+        } else if (!title) {
+          title = cand;
+        } else if (!title.includes(cand) && cand.length > 2) {
+          if (title.length < 5 || /cours|cm|td|ed/i.test(title)) {
+            title = `${cand} (${title})`;
+          } else {
+            title = `${title} : ${cand}`;
+          }
+        }
+      }
+
+      if (!title) {
+        title = subject !== 'Faculté de Médecine' ? subject : 'Cours Faculté';
+      }
+
+      let color = 'cours';
+      const titleLower = (title + ' ' + subject).toLowerCase();
+      if (
+        titleLower.includes('ssh') ||
+        titleLower.includes('anthropologie') ||
+        titleLower.includes('éthique') ||
+        titleLower.includes('tutorat') ||
+        titleLower.includes('colle')
+      ) {
+        color = 'tutorat';
+      } else if (
+        titleLower.includes('stage') ||
+        titleLower.includes('clinique') ||
+        titleLower.includes('hôpital') ||
+        titleLower.includes('garde')
+      ) {
+        color = 'stage';
+      } else if (titleLower.includes('bu') || titleLower.includes('ouverture') || titleLower.includes('personnel')) {
+        color = 'bu';
+      }
 
       events.push({
-        id: `parsed-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        id: `parsed-${dateStr}-${startH}`,
         title,
-        subject: 'Faculté de Médecine',
+        subject,
+        professor: prof,
+        room,
         startTime: startIso,
         endTime: endIso,
-        color: 'cours',
+        color,
         category: 'Faculté',
       });
     }
@@ -567,6 +725,55 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
   }
 
   return [];
+}
+
+/**
+ * Analyse et extraction optique (OCR) d'une photo ou capture d'écran d'emploi du temps
+ * Utilise Tesseract.js dans un Web Worker sans bloquer l'interface
+ */
+export async function parseImageTimetable(
+  file: File,
+  onProgress?: (pct: number, status: string) => void
+): Promise<ParsedCourseEvent[]> {
+  onProgress?.(10, 'Initialisation du lecteur de photo...');
+  const { createWorker } = await import('tesseract.js');
+
+  const worker = await createWorker('fra+eng', 1, {
+    logger: (m: any) => {
+      if (m.status === 'recognizing text') {
+        const pct = Math.min(99, Math.round((m.progress || 0) * 100));
+        onProgress?.(pct, `Lecture de la photo... ${pct}%`);
+      } else if (m.status && m.status.includes('loading')) {
+        onProgress?.(25, 'Chargement des algorithmes de reconnaissance...');
+      }
+    },
+  });
+
+  try {
+    onProgress?.(45, 'Détection optique des textes et caractères...');
+    const result = await worker.recognize(file);
+    const text = result?.data?.text || '';
+
+    if (!text.trim()) {
+      throw new Error(
+        'Aucun texte lisible détecté sur cette photo. Essayez avec une photo plus nette ou mieux éclairée.'
+      );
+    }
+
+    onProgress?.(90, 'Analyse des créneaux horaires et matières...');
+    const courses = parseTimetableText(text);
+
+    if (courses.length === 0) {
+      throw new Error(
+        'Aucun cours n’a pu être identifié sur cette photo. Assurez-vous que les horaires (ex: 08:00 - 10:00) et les jours sont bien cadrés.'
+      );
+    }
+
+    onProgress?.(100, `${courses.length} cours détectés avec succès !`);
+    return courses;
+  } finally {
+    await worker.terminate();
+  }
 }
 
 /**
