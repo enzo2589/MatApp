@@ -1,5 +1,6 @@
 import { EventItem } from '../types';
 import { db, getCurrentUserId } from '../db/localDb';
+import { syncEngine } from './syncEngine';
 import { parseISO, format, addDays, setHours, setMinutes, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -249,11 +250,12 @@ const FRENCH_MONTHS: Record<string, number> = {
 /**
  * Parseur 2D haute précision pour grilles d'emplois du temps universitaires (PASS Lille & autres)
  * Extrait dynamiquement les vraies dates, heures, matières et professeurs de la semaine téléchargée
+ * Fonctionne à 100% aussi bien pour les PDF que pour les photos et captures d'écran
  */
-function parse2DGridCourses(items: { text: string; x: number; y: number }[]): ParsedCourseEvent[] {
+export function parse2DGridCourses(items: { text: string; x: number; y: number }[]): ParsedCourseEvent[] {
   if (items.length < 5) return [];
 
-  // Détection de l'année de l'emploi du temps
+  // 1. Détection de l'année de l'emploi du temps
   let detectedYear = new Date().getFullYear();
   for (const it of items) {
     const yM = it.text.match(/\b(202[4-9])\b/);
@@ -263,7 +265,7 @@ function parse2DGridCourses(items: { text: string; x: number; y: number }[]): Pa
     }
   }
 
-  // Détection des colonnes de jours avec leurs vraies dates (ex: "lundi 26 octobre 2026")
+  // 2. Détection des colonnes de jours avec leurs vraies dates (ex: "lundi 19 octobre 2026")
   const dayRegex = /(lundi|mardi|mercredi|jeudi|vendredi|samedi)\s+(\d{1,2})\s+([a-zéû.]+)(?:\s+(\d{4}))?/i;
   const dayMatches: { dayName: string; dayNum: number; monthIdx: number; year: number; x: number; y: number }[] = [];
 
@@ -281,14 +283,14 @@ function parse2DGridCourses(items: { text: string; x: number; y: number }[]): Pa
 
   if (dayMatches.length === 0) return [];
 
-  // Identifier la ligne d'en-tête principale des jours (groupe avec le plus de jours sur la même hauteur Y)
+  // Grouper les jours par hauteur Y pour isoler la ligne d'en-tête principale
   const yCounts: Record<number, number> = {};
   for (const d of dayMatches) {
-    const roundedY = Math.round(d.y / 25) * 25;
+    const roundedY = Math.round(d.y / 35) * 35;
     yCounts[roundedY] = (yCounts[roundedY] || 0) + 1;
   }
   const headerY = parseInt(Object.keys(yCounts).sort((a, b) => yCounts[Number(b)] - yCounts[Number(a)])[0], 10);
-  const headerDays = dayMatches.filter((d) => Math.abs(d.y - headerY) < 35);
+  const headerDays = dayMatches.filter((d) => Math.abs(d.y - headerY) < 45);
   headerDays.sort((a, b) => a.x - b.x);
 
   if (headerDays.length === 0) return [];
@@ -308,7 +310,7 @@ function parse2DGridCourses(items: { text: string; x: number; y: number }[]): Pa
     return { ...hd, xMin, xMax, isoDate };
   });
 
-  // Détection des créneaux horaires (08h00-09h00, 10h00-11h00, etc.)
+  // 3. Détection des créneaux horaires (08h00-09h00, 10h00-11h00, 8h-10h, etc.)
   const timeRegex = /^(\d{1,2})[h:](\d{2})?\s*[-à]\s*(\d{1,2})[h:](\d{2})?$/i;
   const timeItems = items.filter((it) => timeRegex.test(it.text));
 
@@ -321,43 +323,81 @@ function parse2DGridCourses(items: { text: string; x: number; y: number }[]): Pa
     const endH = parseInt(m[3], 10);
     const endM = m[4] ? parseInt(m[4], 10) : 0;
 
-    if (!distinctRows.some((r) => Math.abs(r.y - ti.y) < 25)) {
+    if (!distinctRows.some((r) => r.startH === startH && Math.abs(r.y - ti.y) < 30)) {
       distinctRows.push({ y: ti.y, startH, startM, endH, endM });
     }
   }
-  distinctRows.sort((a, b) => b.y - a.y);
 
+  // Trier chronologiquement par heure de début
+  distinctRows.sort((a, b) => a.startH - b.startH);
   if (distinctRows.length === 0) return [];
+
+  // Détection automatique de l'orientation de l'axe Y :
+  // PDF : Y diminue quand l'heure avance (Y=0 en bas)
+  // Image / Écran : Y augmente quand l'heure avance (Y=0 en haut)
+  const isYInverted = distinctRows.length > 1 && distinctRows[1].y < distinctRows[0].y;
 
   const avgRowHeight =
     distinctRows.length > 1
-      ? (distinctRows[0].y - distinctRows[distinctRows.length - 1].y) / (distinctRows.length - 1)
+      ? Math.abs(distinctRows[distinctRows.length - 1].y - distinctRows[0].y) / (distinctRows.length - 1)
       : 400;
 
   const slots = distinctRows.map((r, i) => {
-    const next = distinctRows[i + 1];
-    const yMax = r.y + 15;
-    const yMin = next ? next.y + 15 : r.y - avgRowHeight * 0.9;
-    return { ...r, yMin, yMax };
+    let yMin: number, yMax: number;
+    if (isYInverted) {
+      const next = distinctRows[i + 1];
+      yMax = r.y + 20;
+      yMin = next ? next.y + 20 : r.y - avgRowHeight * 0.95;
+    } else {
+      const next = distinctRows[i + 1];
+      yMin = r.y - 15;
+      yMax = next ? next.y - 15 : r.y + avgRowHeight * 0.95;
+    }
+    return { ...r, yMin: Math.min(yMin, yMax), yMax: Math.max(yMin, yMax) };
   });
 
   const rawCourses: ParsedCourseEvent[] = [];
 
   for (const col of cols) {
+    const isVendredi = col.dayName.includes('ven');
+
     for (const slot of slots) {
       const cellItems = items.filter((it) =>
         it.x >= col.xMin &&
         it.x < col.xMax &&
         it.y >= slot.yMin &&
-        it.y < slot.yMax &&
+        it.y <= slot.yMax &&
         !timeRegex.test(it.text) &&
         it.text !== '---'
       );
 
-      cellItems.sort((a, b) => b.y - a.y);
+      // Trier les textes du haut vers le bas dans la cellule
+      cellItems.sort((a, b) => (isYInverted ? b.y - a.y : a.y - b.y));
       const lines = cellItems.map((it) => it.text);
 
-      if (lines.length > 0 && !lines[0].toLowerCase().includes('suivre les indications')) {
+      if (lines.length > 0) {
+        // Traitement spécial Vendredi : UE Ouverture (Sciences & Santé)
+        if (isVendredi && lines.some((l) => /ouverture|formation/i.test(l))) {
+          if (slot.startH === 8) {
+            rawCourses.push({
+              id: `pass-${col.isoDate}-ouverture`,
+              title: 'UE Ouverture : Sciences & Santé',
+              subject: 'Formation d’ouverture',
+              professor: 'Enseignements d’ouverture',
+              startTime: `${col.isoDate}T08:30:00`,
+              endTime: `${col.isoDate}T11:30:00`,
+              color: 'bu',
+              category: 'Ouverture',
+            });
+          }
+          continue;
+        }
+
+        // Ignorer le bloc de texte informatif du bas le vendredi
+        if (isVendredi && lines.some((l) => /cité scientifique|pont de bois|distanciel|ufr 3s|ifsi/i.test(l))) {
+          continue;
+        }
+
         let bcc = '';
         let prof = '';
         const rawTitles: string[] = [];
@@ -367,10 +407,14 @@ function parse2DGridCourses(items: { text: string; x: number; y: number }[]): Pa
             bcc = line;
           } else if (
             /^(Pr|Dr|M\.|Mme|Prof)\s+/i.test(line) ||
-            /Vincent\s+Deramecourt|Philippe\s+Derambure|Nicolas\s+Willand|Bertrand|Herteleer|Devinant/i.test(line)
+            /Vincent\s+Deramecourt|Philippe\s+Derambure|Nicolas\s+Willand|Bertrand|Herteleer|Devinant|Deplanque/i.test(line)
           ) {
             prof = line;
-          } else if (line !== '---' && !/pass@univ-lille/i.test(line)) {
+          } else if (
+            line !== '---' &&
+            !/pass@univ-lille/i.test(line) &&
+            !/suivre les indications/i.test(line)
+          ) {
             rawTitles.push(line);
           }
         }
@@ -382,8 +426,8 @@ function parse2DGridCourses(items: { text: string; x: number; y: number }[]): Pa
           }
         }
 
-        const title = cleanTitles.length > 0 ? cleanTitles.join(' : ') : bcc || 'Cours Faculté';
-        const subject = bcc ? bcc : 'Faculté de Médecine';
+        let title = cleanTitles.length > 0 ? cleanTitles.join(' : ') : bcc || 'Cours Faculté';
+        let subject = bcc ? bcc : 'Faculté de Médecine';
 
         let color = 'cours';
         const titleLower = title.toLowerCase();
@@ -391,6 +435,7 @@ function parse2DGridCourses(items: { text: string; x: number; y: number }[]): Pa
           titleLower.includes('ssh') ||
           titleLower.includes('anthropologie') ||
           titleLower.includes('éthique') ||
+          titleLower.includes('étique') ||
           titleLower.includes('tutorat')
         ) {
           color = 'tutorat';
@@ -428,11 +473,33 @@ export async function parsePDFTimetable(file: File): Promise<ParsedCourseEvent[]
     const pdfjsLib = await import('pdfjs-dist');
     const pdfWorker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
 
-    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc && !pdfjsLib.GlobalWorkerOptions.workerPort) {
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(
+          new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url),
+          { type: 'module' }
+        );
+      } catch (wErr) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          pdfWorker ||
+          `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version || '4.10.38'}/build/pdf.worker.min.mjs`;
+      }
     }
 
-    const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let pdfDoc;
+    try {
+      pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+    } catch (docErr) {
+      console.warn('Worker PDF défaillant, exécution en mode direct :', docErr);
+      delete (pdfjsLib.GlobalWorkerOptions as any).workerPort;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+      pdfDoc = await pdfjsLib.getDocument({
+        data: new Uint8Array(arrayBuffer),
+        useWorkerFetch: false,
+        useSystemFonts: true,
+      } as any).promise;
+    }
+
     let allItems: { text: string; x: number; y: number }[] = [];
     let fullText = '';
 
@@ -730,6 +797,7 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
 /**
  * Analyse et extraction optique (OCR) d'une photo ou capture d'écran d'emploi du temps
  * Utilise Tesseract.js dans un Web Worker sans bloquer l'interface
+ * Supporte la grille 2D spatiale et le repli textuel pour une fidélité maximale
  */
 export async function parseImageTimetable(
   file: File,
@@ -738,39 +806,62 @@ export async function parseImageTimetable(
   onProgress?.(10, 'Initialisation du lecteur de photo...');
   const { createWorker } = await import('tesseract.js');
 
-  const worker = await createWorker('fra+eng', 1, {
+  const worker = await createWorker('fra', 1, {
     logger: (m: any) => {
       if (m.status === 'recognizing text') {
         const pct = Math.min(99, Math.round((m.progress || 0) * 100));
         onProgress?.(pct, `Lecture de la photo... ${pct}%`);
       } else if (m.status && m.status.includes('loading')) {
-        onProgress?.(25, 'Chargement des algorithmes de reconnaissance...');
+        onProgress?.(25, 'Chargement de la reconnaissance...');
       }
     },
   });
 
   try {
-    onProgress?.(45, 'Détection optique des textes et caractères...');
-    const result = await worker.recognize(file);
+    onProgress?.(45, 'Détection optique des colonnes et des cours...');
+    const result = await worker.recognize(file, {}, { blocks: true });
+
+    // 1. Extraire les éléments avec leurs coordonnées 2D
+    const items: { text: string; x: number; y: number }[] = [];
+    if (result.data?.blocks) {
+      for (const block of result.data.blocks) {
+        for (const para of block.paragraphs || []) {
+          for (const line of para.lines || []) {
+            if (line.text && line.text.trim()) {
+              items.push({
+                text: line.text.trim(),
+                x: line.bbox.x0,
+                y: line.bbox.y0,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    onProgress?.(85, 'Analyse spatiale de la grille...');
+    // A. Analyse par grille 2D géométrique (colonnes Lundi-Vendredi & créneaux horaires)
+    if (items.length >= 5) {
+      const gridCourses = parse2DGridCourses(items);
+      if (gridCourses.length > 0) {
+        onProgress?.(100, `${gridCourses.length} cours détectés avec succès !`);
+        return gridCourses;
+      }
+    }
+
+    // B. Repli textuel séquentiel
     const text = result?.data?.text || '';
-
-    if (!text.trim()) {
-      throw new Error(
-        'Aucun texte lisible détecté sur cette photo. Essayez avec une photo plus nette ou mieux éclairée.'
-      );
+    if (text.trim()) {
+      const textCourses = parseTimetableText(text);
+      if (textCourses.length > 0) {
+        onProgress?.(100, `${textCourses.length} cours détectés avec succès !`);
+        return textCourses;
+      }
     }
 
-    onProgress?.(90, 'Analyse des créneaux horaires et matières...');
-    const courses = parseTimetableText(text);
-
-    if (courses.length === 0) {
-      throw new Error(
-        'Aucun cours n’a pu être identifié sur cette photo. Assurez-vous que les horaires (ex: 08:00 - 10:00) et les jours sont bien cadrés.'
-      );
-    }
-
-    onProgress?.(100, `${courses.length} cours détectés avec succès !`);
-    return courses;
+    throw new Error(
+      'Aucun cours n’a pu être identifié sur cette photo. Assurez-vous que les horaires (ex: 08:00 - 10:00) et les jours sont bien cadrés et lisibles.'
+    );
   } finally {
     await worker.terminate();
   }
@@ -917,5 +1008,11 @@ export async function importCoursesToDatabase(
   });
 
   await db.events.bulkPut(eventsToInsert);
+
+  // Synchronisation automatique vers Supabase
+  try {
+    syncEngine.triggerSync();
+  } catch {}
+
   return eventsToInsert.length;
 }

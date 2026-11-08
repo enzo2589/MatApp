@@ -249,11 +249,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <button
               type="button"
               onClick={onOpenImportModal}
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 active:scale-95 text-xs font-bold rounded-xl border border-indigo-200 transition-all"
-              title="Importer un emploi du temps PDF ou ADE Campus"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 active:scale-95 text-xs font-bold rounded-xl border border-indigo-200 transition-all"
+              title="Importer un emploi du temps PDF, Photo ou .ics"
             >
               <GraduationCap className="w-4 h-4 text-indigo-600" />
-              <span>Importer Planning</span>
+              <span className="hidden sm:inline">Importer Planning</span>
+              <span className="sm:hidden">Import</span>
             </button>
           )}
 

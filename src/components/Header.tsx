@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   LogOut,
   User as UserIcon,
+  GraduationCap,
 } from 'lucide-react';
 import { alarmService } from '../services/alarmService';
 import { clsx } from 'clsx';
@@ -23,6 +24,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenTodoList,
+  onOpenImportModal,
   pendingTasksCount,
   userEmail,
   onSignOut,
@@ -110,6 +112,20 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="w-2 h-2 rounded-full bg-amber-500" />
             <span>Mode Invité</span>
           </div>
+        )}
+
+        {/* Bouton d'Import Emploi du Temps */}
+        {onOpenImportModal && (
+          <button
+            type="button"
+            onClick={onOpenImportModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100/90 text-indigo-700 font-bold text-xs border border-indigo-200/90 transition-all active:scale-95 shadow-2xs cursor-pointer"
+            title="Importer un planning (Photo, Capture, PDF ou .ics)"
+          >
+            <GraduationCap className="w-3.5 h-3.5 text-indigo-600 stroke-[2.3]" />
+            <span className="hidden sm:inline">Importer Planning</span>
+            <span className="inline sm:hidden">Importer</span>
+          </button>
         )}
 
         {/* Bouton de Rappels & Notifications */}

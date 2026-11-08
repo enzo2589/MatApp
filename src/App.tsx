@@ -158,6 +158,7 @@ export function App() {
       <Header
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenTodoList={() => setIsMobileTodoOpen(true)}
+        onOpenImportModal={() => setIsImportModalOpen(true)}
         pendingTasksCount={pendingTasksCount}
         userEmail={currentUser?.email || null}
         onSignOut={handleSignOut}
