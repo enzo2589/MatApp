@@ -18,6 +18,28 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarCheck, CalendarDays, CheckSquare, Sparkles, Calendar } from 'lucide-react';
 import { clsx } from 'clsx';
 import { User } from '@supabase/supabase-js';
+import { addDays } from 'date-fns';
+
+const STORAGE_VIEW_DATE = 'matapp_active_view_date';
+
+function getInitialViewDate(): Date {
+  try {
+    const saved = localStorage.getItem(STORAGE_VIEW_DATE);
+    if (saved) {
+      const parsed = new Date(saved);
+      if (!isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+  } catch {}
+
+  const now = new Date();
+  // Le dimanche, les étudiants préparent la semaine qui commence le lendemain (lundi)
+  if (now.getDay() === 0) {
+    return addDays(now, 1);
+  }
+  return now;
+}
 
 // Récupération instantanée de la session sauvegardée en local (aucun besoin de se reconnecter)
 function getInitialAuth(): { state: 'authenticated' | 'unauthenticated' | 'loading'; user: User | null } {
@@ -42,11 +64,18 @@ export function App() {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>(initialAuth.state);
   const [currentUser, setCurrentUser] = useState<User | null>(initialAuth.user);
 
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [currentDate, setCurrentDate] = useState<Date>(getInitialViewDate);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isMobileTodoOpen, setIsMobileTodoOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'calendar' | 'sidebar' | 'todo'>('calendar');
+
+  const handleUpdateCurrentDate = (newDate: Date) => {
+    setCurrentDate(newDate);
+    try {
+      localStorage.setItem(STORAGE_VIEW_DATE, newDate.toISOString());
+    } catch {}
+  };
 
   // Initialisation et vérification de la session en arrière-plan
   useEffect(() => {
@@ -231,7 +260,7 @@ export function App() {
             <MiniMonthPicker
               currentDate={currentDate}
               onSelectDate={(newDate) => {
-                setCurrentDate(newDate);
+                handleUpdateCurrentDate(newDate);
                 setMobileTab('calendar');
               }}
               events={allEvents || []}
@@ -259,7 +288,7 @@ export function App() {
           <CalendarView
             userId={currentUserId}
             currentDate={currentDate}
-            onSelectDate={setCurrentDate}
+            onSelectDate={handleUpdateCurrentDate}
             onOpenTodoList={() => setIsMobileTodoOpen(true)}
             onOpenImportModal={() => setIsImportModalOpen(true)}
             pendingTasksCount={pendingTasksCount}
@@ -324,7 +353,7 @@ export function App() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImportSuccess={(targetDate) => {
-          setCurrentDate(targetDate);
+          handleUpdateCurrentDate(targetDate);
           setMobileTab('calendar');
         }}
       />

@@ -15,6 +15,7 @@ import {
   addDays,
   startOfWeek,
   eachDayOfInterval,
+  getISOWeek,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
@@ -46,10 +47,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onOpenImportModal,
   pendingTasksCount = 0,
 }) => {
-  const [internalDate, setInternalDate] = useState<Date>(new Date());
+  const [internalDate, setInternalDate] = useState<Date>(() => {
+    try {
+      const saved = localStorage.getItem('matapp_active_view_date');
+      if (saved) {
+        const d = new Date(saved);
+        if (!isNaN(d.getTime())) return d;
+      }
+    } catch {}
+    const now = new Date();
+    return now.getDay() === 0 ? addDays(now, 1) : now;
+  });
   const currentDate = externalDate || internalDate;
 
   const handleUpdateDate = (newDate: Date) => {
+    try {
+      localStorage.setItem('matapp_active_view_date', newDate.toISOString());
+    } catch {}
     if (externalOnSelectDate) {
       externalOnSelectDate(newDate);
     } else {
@@ -164,6 +178,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const formattedMonthYear = format(currentDate, 'MMMM yyyy', { locale: fr });
+  const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn: 1 }), [currentDate]);
+  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const isoWeekNumber = useMemo(() => getISOWeek(currentDate), [currentDate]);
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50 relative select-none">
@@ -197,9 +214,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
           </div>
 
-          <h2 className="text-sm md:text-base font-extrabold text-slate-900 capitalize tracking-tight ml-1">
-            {formattedMonthYear}
-          </h2>
+          {viewMode === 'week' ? (
+            <div className="flex items-center gap-1.5 md:gap-2 ml-1 flex-wrap">
+              <span className="text-[11px] md:text-xs font-black text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 rounded-lg shadow-2xs">
+                Semaine {isoWeekNumber}
+              </span>
+              <h2 className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 tracking-tight">
+                {format(weekStart, 'd')} - {format(weekEnd, 'd MMMM yyyy', { locale: fr })}
+              </h2>
+            </div>
+          ) : (
+            <h2 className="text-sm md:text-base font-extrabold text-slate-900 capitalize tracking-tight ml-1">
+              {formattedMonthYear}
+            </h2>
+          )}
         </div>
 
         {/* Contrôles de Vue (Semaine / Mois) + Boutons d'Action */}

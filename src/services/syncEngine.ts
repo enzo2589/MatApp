@@ -284,6 +284,12 @@ class SyncEngine {
           });
         }
       } else {
+        // Protection vitale : Si l'événement local est tout juste créé ou importé (pending_create),
+        // on ne laisse jamais une suppression distante obsolète l'effacer
+        if (local.sync_status === 'pending_create' && remote.is_deleted) {
+          continue;
+        }
+
         // Résolution de conflit par Last-Write-Wins
         const remoteDate = new Date(remote.updated_at).getTime();
         const localDate = new Date(local.updated_at).getTime();

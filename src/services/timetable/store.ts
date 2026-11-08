@@ -203,21 +203,6 @@ export async function saveCoursesToDatabase(
         }
       }
     }
-
-    // Suppression étendue par plage de dates dans Supabase
-    const client = getSupabaseClient();
-    if (client && userId && userId !== 'local-practitioner-user') {
-      try {
-        await client
-          .from('events')
-          .update({ is_deleted: true, updated_at: now })
-          .eq('user_id', userId)
-          .gte('start_time', weekStart.toISOString())
-          .lt('start_time', weekEnd.toISOString());
-      } catch (err) {
-        console.warn('Erreur soft-delete Supabase week range:', err);
-      }
-    }
   }
 
   // 3. Nettoyage des éventuels doublons stricts
@@ -244,7 +229,35 @@ export async function saveCoursesToDatabase(
     };
   });
 
+  // Sauvegarde locale instantanée dans IndexedDB
   await db.events.bulkPut(eventsToInsert);
+
+  // Sauvegarde directe et immédiate dans Supabase pour pérenniser l'agenda au refresh
+  const client = getSupabaseClient();
+  if (client && userId && userId !== 'local-practitioner-user') {
+    try {
+      const rowsForSupabase = eventsToInsert.map((e) => ({
+        id: e.id,
+        user_id: e.user_id,
+        title: e.title,
+        description: e.description,
+        start_time: e.start_time,
+        end_time: e.end_time,
+        color: e.color,
+        alarms: e.alarms,
+        updated_at: e.updated_at,
+        is_deleted: false,
+      }));
+
+      const { error } = await client.from('events').upsert(rowsForSupabase);
+      if (!error) {
+        const syncedEvents = eventsToInsert.map((e) => ({ ...e, sync_status: 'synced' as const }));
+        await db.events.bulkPut(syncedEvents);
+      }
+    } catch (err) {
+      console.warn('Erreur push direct Supabase import:', err);
+    }
+  }
 
   // Synchronisation automatique vers Supabase
   try {
