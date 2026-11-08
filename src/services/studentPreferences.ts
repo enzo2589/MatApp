@@ -175,6 +175,12 @@ export function deleteStudentFavorite(id: string): void {
   notifyChange();
 }
 
+export function resetStudentFavorites(): FavoriteItem[] {
+  localStorage.setItem(STORAGE_FAVORITES_KEY, JSON.stringify(INITIAL_FAVORITES));
+  notifyChange();
+  return INITIAL_FAVORITES;
+}
+
 /* ==============================================================================
    GESTION DE LA COLORATION DES JOURS DU MOIS (EXAMENS, REPOS, STAGES...)
    ============================================================================== */

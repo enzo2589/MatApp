@@ -61,6 +61,7 @@ export function App() {
         const userObj = { id: user.id, email: user.email };
         localStorage.setItem('matapp_user', JSON.stringify(userObj));
         localStorage.setItem('matapp_current_user', JSON.stringify(userObj));
+        purgeCorruptedGhostEvents().catch(() => {});
         syncEngine.init();
       } else {
         const saved =

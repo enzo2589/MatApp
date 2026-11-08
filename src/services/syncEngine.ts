@@ -2,6 +2,7 @@ import { db, getCurrentUserId } from '../db/localDb';
 import { getSupabaseClient } from './supabaseClient';
 import { EventItem, TaskItem, SyncEngineStatus } from '../types';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { isGhostCourse } from './timetable/store';
 
 type StatusListener = (status: SyncEngineStatus) => void;
 
@@ -259,6 +260,20 @@ class SyncEngine {
     if (error || !remoteEvents) return;
 
     for (const remote of remoteEvents) {
+      // Si l'événement distant est un résidu corrompu d'un ancien import,
+      // on le neutralise immédiatement et on ne l'injecte JAMAIS en local
+      if (isGhostCourse(remote)) {
+        if (!remote.is_deleted) {
+          client
+            .from('events')
+            .update({ is_deleted: true, updated_at: new Date().toISOString() })
+            .eq('id', remote.id)
+            .then();
+        }
+        await db.events.delete(remote.id);
+        continue;
+      }
+
       const local = await db.events.get(remote.id);
 
       if (!local) {

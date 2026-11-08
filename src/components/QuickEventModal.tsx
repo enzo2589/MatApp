@@ -4,14 +4,18 @@ import {
   Trash2,
   Clock,
   Bell,
-  Tag,
   AlignLeft,
   Check,
   Star,
   Copy,
   BookmarkPlus,
+  Plus,
+  Pencil,
+  Settings2,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { EventItem, FavoriteItem } from '../types';
 import { MEDICAL_COLORS, getColorTheme } from '../constants/colors';
@@ -19,6 +23,8 @@ import { TimePicker5Min } from './TimePicker5Min';
 import {
   getStudentFavorites,
   saveStudentFavorite,
+  deleteStudentFavorite,
+  resetStudentFavorites,
   subscribePreferences,
 } from '../services/studentPreferences';
 import { format, parseISO, addHours, addDays, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
@@ -41,6 +47,17 @@ const ALARM_PRESETS = [
   { label: '1h avant', minutes: 60 },
 ];
 
+const TEMPLATE_DURATION_PRESETS = [
+  { label: '30 min', minutes: 30 },
+  { label: '45 min', minutes: 45 },
+  { label: '1 h', minutes: 60 },
+  { label: '1 h 30', minutes: 90 },
+  { label: '2 h', minutes: 120 },
+  { label: '3 h', minutes: 180 },
+  { label: '4 h', minutes: 240 },
+  { label: 'Garde 12h', minutes: 720 },
+];
+
 export const QuickEventModal: React.FC<QuickEventModalProps> = ({
   isOpen,
   onClose,
@@ -58,6 +75,17 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
   const [favorites, setFavorites] = useState<FavoriteItem[]>(getStudentFavorites());
   const [savedAsFavoriteFeedback, setSavedAsFavoriteFeedback] = useState(false);
 
+  // Mode gestion des modèles
+  const [isManagingFavorites, setIsManagingFavorites] = useState(false);
+  const [editingFavorite, setEditingFavorite] = useState<FavoriteItem | null>(null);
+  const [isCreatingFavorite, setIsCreatingFavorite] = useState(false);
+
+  // Champs de l'éditeur de modèle
+  const [favFormTitle, setFavFormTitle] = useState('');
+  const [favFormColor, setFavFormColor] = useState('cours');
+  const [favFormDuration, setFavFormDuration] = useState(60);
+  const [favFormAlarms, setFavFormAlarms] = useState<number[]>([15]);
+
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Écouter les changements des favoris
@@ -73,6 +101,10 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setSavedAsFavoriteFeedback(false);
+      setIsManagingFavorites(false);
+      setEditingFavorite(null);
+      setIsCreatingFavorite(false);
+
       if (initialData) {
         setTitle(initialData.title || '');
         setDescription(initialData.description || '');
@@ -131,13 +163,14 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
     }
   };
 
-  // Sauvegarder l'événement courant dans les modèles
+  // Sauvegarder l'activité courante comme nouveau modèle rapide
   const handleSaveAsFavorite = () => {
     if (!title.trim()) return;
 
     const start = parseISO(startTime);
     const end = parseISO(endTime);
     const duration = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
+    const theme = getColorTheme(color);
 
     saveStudentFavorite({
       title: title.trim(),
@@ -145,12 +178,69 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
       durationMinutes: duration,
       description: description.trim(),
       alarms,
-      emoji: getColorTheme(color).emoji || '📌',
-      category: getColorTheme(color).category,
+      emoji: theme.emoji || '📌',
+      category: theme.name,
     });
 
     setSavedAsFavoriteFeedback(true);
     setTimeout(() => setSavedAsFavoriteFeedback(false), 2500);
+  };
+
+  // Ouvrir l'éditeur pour créer un nouveau modèle de zéro
+  const handleOpenCreateFavorite = () => {
+    setFavFormTitle(title.trim() || '');
+    setFavFormColor(color || 'cours');
+    const start = parseISO(startTime);
+    const end = parseISO(endTime);
+    const duration = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
+    setFavFormDuration(duration || 60);
+    setFavFormAlarms(alarms.length > 0 ? alarms : [15]);
+    setEditingFavorite(null);
+    setIsCreatingFavorite(true);
+  };
+
+  // Ouvrir l'éditeur pour modifier un modèle existant
+  const handleOpenEditFavorite = (fav: FavoriteItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFavFormTitle(fav.title);
+    setFavFormColor(fav.color);
+    setFavFormDuration(fav.durationMinutes);
+    setFavFormAlarms(fav.alarms || []);
+    setEditingFavorite(fav);
+    setIsCreatingFavorite(true);
+  };
+
+  // Sauvegarder le modèle dans l'éditeur (création ou modification)
+  const handleSaveFavoriteForm = () => {
+    if (!favFormTitle.trim()) return;
+    const theme = getColorTheme(favFormColor);
+
+    saveStudentFavorite({
+      id: editingFavorite?.id,
+      title: favFormTitle.trim(),
+      color: favFormColor,
+      durationMinutes: favFormDuration,
+      description: editingFavorite?.description || '',
+      alarms: favFormAlarms,
+      emoji: theme.emoji || '📌',
+      category: theme.name,
+    });
+
+    setIsCreatingFavorite(false);
+    setEditingFavorite(null);
+  };
+
+  // Supprimer un modèle
+  const handleDeleteFavorite = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteStudentFavorite(id);
+  };
+
+  // Restaurer les modèles officiels par défaut
+  const handleResetDefaults = () => {
+    if (window.confirm('Restaurer la liste des modèles étudiants par défaut ?')) {
+      resetStudentFavorites();
+    }
   };
 
   // Duplication de l'activité pour demain
@@ -219,7 +309,7 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
         <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-white">
           <div className="flex items-center gap-2.5">
             <span
-              className="w-3.5 h-3.5 rounded-full shrink-0 shadow-2xs"
+              className="w-3.5 h-3.5 rounded-full shrink-0 shadow-2xs transition-colors"
               style={{ backgroundColor: currentColorTheme.hex }}
             />
             <div>
@@ -244,37 +334,255 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
 
         {/* Corps de la modal */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-          {/* Section 1 : Modèles fréquents */}
-          {favorites.length > 0 && (
-            <div>
-              <span className="text-[11px] font-semibold text-slate-500 block mb-1.5">
-                Modèles fréquents
-              </span>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {/* SECTION 1 : MODÈLES FRÉQUENTS AVEC GESTION COMPLÈTE */}
+          <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-200/80">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span className="text-xs font-bold text-slate-800">
+                  Modèles fréquents
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium bg-slate-200/60 px-1.5 py-0.5 rounded-full">
+                  {favorites.length}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleOpenCreateFavorite}
+                  className="px-2 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 active:scale-95 rounded-lg border border-indigo-200 transition-all flex items-center gap-1"
+                  title="Créer un nouveau modèle d'activité"
+                >
+                  <Plus className="w-3 h-3 stroke-[2.5]" />
+                  <span>Nouveau</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsManagingFavorites((prev) => !prev)}
+                  className={clsx(
+                    'px-2 py-1 text-[11px] font-bold rounded-lg border transition-all flex items-center gap-1 active:scale-95',
+                    isManagingFavorites
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                  )}
+                  title={isManagingFavorites ? 'Quitter le mode gestion' : 'Gérer, modifier ou supprimer les modèles'}
+                >
+                  <Settings2 className="w-3 h-3" />
+                  <span>{isManagingFavorites ? 'Terminer' : 'Gérer'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Liste des modèles */}
+            {favorites.length > 0 ? (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-0.5">
                 {favorites.map((fav) => {
                   const favTheme = getColorTheme(fav.color);
+                  const isMatching = title.trim().toLowerCase() === fav.title.toLowerCase();
+
                   return (
-                    <button
+                    <div
                       key={fav.id}
-                      type="button"
-                      onClick={() => handleApplyFavorite(fav)}
-                      className="shrink-0 px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 transition-all active:scale-95 flex items-center gap-2 text-slate-800 shadow-2xs"
-                      title={`${fav.title} (${fav.durationMinutes} min)`}
+                      className={clsx(
+                        'shrink-0 flex items-center rounded-xl border transition-all text-xs font-semibold shadow-2xs group',
+                        isMatching
+                          ? 'border-indigo-600 bg-indigo-50/80 ring-1 ring-indigo-500/20'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      )}
                     >
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: favTheme.hex }}
-                      />
-                      <span className="truncate max-w-[130px]">{fav.title}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">{fav.durationMinutes}m</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyFavorite(fav)}
+                        className="px-2.5 py-1.5 flex items-center gap-2 text-slate-800"
+                        title={`Appliquer "${fav.title}" (${fav.durationMinutes} min)`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: favTheme.hex }}
+                        />
+                        <span className="truncate max-w-[125px] font-medium">{fav.title}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          {fav.durationMinutes >= 60
+                            ? `${fav.durationMinutes / 60}h`
+                            : `${fav.durationMinutes}m`}
+                        </span>
+                      </button>
+
+                      {/* Boutons d'édition et suppression en mode gestion */}
+                      {isManagingFavorites && (
+                        <div className="flex items-center gap-0.5 pr-1.5 pl-0.5 border-l border-slate-100">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenEditFavorite(fav, e)}
+                            className="w-5 h-5 rounded-md hover:bg-indigo-100 text-slate-400 hover:text-indigo-700 flex items-center justify-center transition-colors"
+                            title="Modifier ce modèle"
+                          >
+                            <Pencil className="w-2.5 h-2.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteFavorite(fav.id, e)}
+                            className="w-5 h-5 rounded-md hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors"
+                            title="Supprimer ce modèle"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-[11px] text-slate-400 italic py-1">
+                Aucun modèle enregistré. Cliquez sur "+ Nouveau" pour en ajouter un.
+              </p>
+            )}
 
-          {/* Section 2 : Titre de l'activité */}
+            {isManagingFavorites && (
+              <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">
+                  Cliquez sur ✏️ pour modifier ou 🗑️ pour supprimer un modèle.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleResetDefaults}
+                  className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 font-semibold"
+                  title="Restaurer les modèles par défaut"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Défauts</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* FORMULAIRE INLINE D'ÉDITION / CRÉATION D'UN MODÈLE */}
+          <AnimatePresence>
+            {isCreatingFavorite && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, scale: 0.98 }}
+                animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                exit={{ opacity: 0, height: 0, scale: 0.98 }}
+                className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-200 space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <BookmarkPlus className="w-4 h-4 text-indigo-600" />
+                    <h4 className="text-xs font-bold text-indigo-950">
+                      {editingFavorite ? 'Modifier le modèle' : 'Créer un nouveau modèle'}
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingFavorite(false);
+                      setEditingFavorite(null);
+                    }}
+                    className="w-6 h-6 rounded-lg hover:bg-indigo-100 text-indigo-700 flex items-center justify-center"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Nom du modèle */}
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">
+                    Nom du modèle
+                  </label>
+                  <input
+                    type="text"
+                    value={favFormTitle}
+                    onChange={(e) => setFavFormTitle(e.target.value)}
+                    placeholder="Ex. Anki Pharmacologie, ED Anatomie..."
+                    className="w-full px-3 py-1.5 text-xs font-semibold rounded-xl border border-indigo-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900"
+                  />
+                </div>
+
+                {/* Type d'activité & Couleur pour le modèle */}
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">
+                    Type d'activité associé
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                    {MEDICAL_COLORS.slice(0, 6).map((col) => {
+                      const isSel = favFormColor === col.id;
+                      return (
+                        <button
+                          key={col.id}
+                          type="button"
+                          onClick={() => setFavFormColor(col.id)}
+                          className={clsx(
+                            'flex items-center gap-1.5 px-2 py-1 rounded-lg border text-left text-[11px] transition-all',
+                            isSel
+                              ? 'border-indigo-600 bg-indigo-100/70 font-bold text-indigo-950'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          )}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: col.hex }}
+                          />
+                          <span className="truncate">{col.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Durée par défaut */}
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">
+                    Durée par défaut
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {TEMPLATE_DURATION_PRESETS.map((dur) => (
+                      <button
+                        key={dur.minutes}
+                        type="button"
+                        onClick={() => setFavFormDuration(dur.minutes)}
+                        className={clsx(
+                          'px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all',
+                          favFormDuration === dur.minutes
+                            ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-2xs'
+                            : 'bg-white text-slate-700 border-indigo-200 hover:bg-indigo-100/50'
+                        )}
+                      >
+                        {dur.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bouton d'enregistrement du modèle */}
+                <div className="flex items-center justify-end gap-2 pt-1 border-t border-indigo-200/60">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingFavorite(false);
+                      setEditingFavorite(null);
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-lg"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveFavoriteForm}
+                    disabled={!favFormTitle.trim()}
+                    className="px-3 py-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg flex items-center gap-1 shadow-xs"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>Enregistrer le modèle</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* SECTION 2 : TITRE DE L'ACTIVITÉ */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -309,7 +617,7 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
             />
           </div>
 
-          {/* Section 3 : Horaires & Durée */}
+          {/* SECTION 3 : HORAIRES & DURÉE */}
           <div>
             <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
               Horaires
@@ -322,11 +630,32 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
             />
           </div>
 
-          {/* Section 4 : Catégorie */}
+          {/* SECTION 4 : TYPE D'ACTIVITÉ & COULEUR (CLARIFIÉ ET CONNECTÉ AUX MODÈLES) */}
           <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
-              Catégorie
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  Type d'activité & Couleur
+                </label>
+                <p className="text-[10px] text-slate-400">
+                  Détermine la couleur du bloc sur votre emploi du temps
+                </p>
+              </div>
+
+              {/* Aperçu couleur sélectionnée */}
+              <div
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-bold"
+                style={{
+                  backgroundColor: currentColorTheme.bgPastel,
+                  borderColor: currentColorTheme.badgeBg,
+                  color: currentColorTheme.textColor,
+                }}
+              >
+                <span>{currentColorTheme.emoji}</span>
+                <span>{currentColorTheme.name}</span>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {MEDICAL_COLORS.map((col) => {
                 const isSelected = color === col.id || color === col.hex;
@@ -336,17 +665,18 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
                     type="button"
                     onClick={() => setColor(col.id)}
                     className={clsx(
-                      'flex items-center gap-2 p-2 rounded-xl border text-left transition-all active:scale-98',
+                      'flex items-center gap-2 p-2 rounded-xl border text-left transition-all active:scale-98 cursor-pointer',
                       isSelected
-                        ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-500/20 shadow-2xs font-bold'
+                        ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-500/30 shadow-2xs font-bold'
                         : 'border-slate-200 bg-white hover:bg-slate-50'
                     )}
                   >
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
                       style={{ backgroundColor: col.hex }}
                     />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex items-center gap-1.5">
+                      <span className="text-xs">{col.emoji}</span>
                       <p className={clsx('text-xs truncate leading-tight', isSelected ? 'text-indigo-950 font-bold' : 'text-slate-800 font-medium')}>
                         {col.name}
                       </p>
@@ -357,7 +687,7 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
             </div>
           </div>
 
-          {/* Section 5 : Rappels */}
+          {/* SECTION 5 : RAPPELS */}
           <div>
             <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
               Rappels
@@ -384,7 +714,7 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
             </div>
           </div>
 
-          {/* Section 6 : Notes */}
+          {/* SECTION 6 : NOTES */}
           <div>
             <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
               Notes (optionnel)
@@ -406,7 +736,7 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
               <button
                 type="button"
                 onClick={handleDelete}
-                className="px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1.5"
+                className="px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
                 title="Supprimer cette activité"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -418,7 +748,7 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
               <button
                 type="button"
                 onClick={handleDuplicateToTomorrow}
-                className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-lg transition-colors flex items-center gap-1.5"
+                className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
                 title="Dupliquer pour demain"
               >
                 <Copy className="w-3.5 h-3.5" />
@@ -431,7 +761,7 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors"
+              className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
             >
               Annuler
             </button>
@@ -440,7 +770,7 @@ export const QuickEventModal: React.FC<QuickEventModalProps> = ({
               type="button"
               onClick={() => handleSubmit()}
               disabled={!title.trim() || isSubmitting}
-              className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:pointer-events-none rounded-xl transition-all shadow-xs flex items-center gap-1.5"
+              className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:pointer-events-none rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
               <Check className="w-3.5 h-3.5" />
               <span>{isSubmitting ? 'Enregistrement...' : 'Enregistrer'}</span>

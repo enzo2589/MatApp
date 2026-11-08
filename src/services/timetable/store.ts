@@ -31,6 +31,63 @@ export function stringToUuid(str: string): string {
 }
 
 /**
+ * Détecte si un cours est un artefact ou fantôme corrompu d'un ancien import
+ */
+export function isGhostCourse(ev: {
+  title?: string;
+  description?: string;
+  start_time?: string;
+  end_time?: string;
+}): boolean {
+  if (!ev) return false;
+  const title = (ev.title || '').trim().toLowerCase();
+  const desc = (ev.description || '').trim().toLowerCase();
+  const startTime = ev.start_time || '';
+  const endTime = ev.end_time || '';
+
+  // 1. Notes de bas de page ou descriptions de campus en bas des emplois du temps PASS
+  if (
+    title.includes('philosophie') ||
+    title.includes('infirmière') ||
+    title.includes('infirmiere') ||
+    title.includes('pont de bois') ||
+    title.includes('cité scientifique') ||
+    title.includes('distanciel') ||
+    title.includes('ufr 3s') ||
+    title.includes('ifsi') ||
+    title.includes('pass@univ-lille') ||
+    title.includes('suivre les indications') ||
+    title.includes('sciences du médicament') ||
+    title.includes('sciences sanitaires') ||
+    title.includes('staps-faculté') ||
+    desc.includes('philosophie') ||
+    desc.includes('infirmière')
+  ) {
+    return true;
+  }
+
+  // 2. En-tête de bloc BCC isolé sans intitulé de cours
+  if (/^bcc\s*[1-4]$/i.test(title)) {
+    return true;
+  }
+
+  // 3. Créneaux fantômes 12h-13h ou 12h30-13h30 (il n'y a jamais de cours à midi en PASS)
+  if (startTime.includes('T12:00:00') || startTime.includes('T12:30:00')) {
+    return true;
+  }
+
+  // 4. Férié fragmenté en tranches d'1h (le vrai férié PASS est un bloc complet de 4h 08h-12h)
+  if (
+    (title === 'férié' || title === 'ferie') &&
+    (startTime.includes('T09:00:00') || startTime.includes('T12:00:00'))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Purge définitivement les résidus corrompus de l'ancien import
  * (ex: Philosophie, Sciences infirmières, créneau fantôme 12h-13h)
  * aussi bien dans Dexie que dans Supabase
@@ -41,19 +98,7 @@ export async function purgeCorruptedGhostEvents(): Promise<number> {
   const ghostIds: string[] = [];
 
   for (const ev of allEvents) {
-    const title = ev.title.trim().toLowerCase();
-    const isGhost =
-      title.includes('philosophie') ||
-      title.includes('infirmière') ||
-      title.includes('infirmiere') ||
-      title.includes('pont de bois') ||
-      title.includes('cité scientifique') ||
-      title === 'bcc1' ||
-      title === 'bcc2' ||
-      (title === 'férié' && ev.start_time.includes('12:00:00')) ||
-      (title === 'férié' && ev.start_time.includes('09:00:00') && ev.end_time.includes('10:00:00'));
-
-    if (isGhost) {
+    if (isGhostCourse(ev)) {
       ghostIds.push(ev.id);
     }
   }
@@ -62,7 +107,7 @@ export async function purgeCorruptedGhostEvents(): Promise<number> {
     await db.events.bulkDelete(ghostIds);
 
     const client = getSupabaseClient();
-    if (client && userId && userId !== 'local-practitioner-user') {
+    if (client) {
       try {
         await client
           .from('events')
@@ -144,9 +189,22 @@ export async function saveCoursesToDatabase(
 
     if (toDeleteIds.length > 0) {
       await db.events.bulkDelete(toDeleteIds);
+
+      // Suppression ciblée dans Supabase pour que le pull distant ne réinjecte jamais les anciens cours
+      const client = getSupabaseClient();
+      if (client && userId && userId !== 'local-practitioner-user') {
+        try {
+          await client
+            .from('events')
+            .update({ is_deleted: true, updated_at: now })
+            .in('id', toDeleteIds);
+        } catch (err) {
+          console.warn('Erreur soft-delete Supabase week IDs:', err);
+        }
+      }
     }
 
-    // Suppression dans Supabase pour que le pull distant ne réinjecte jamais les anciens cours
+    // Suppression étendue par plage de dates dans Supabase
     const client = getSupabaseClient();
     if (client && userId && userId !== 'local-practitioner-user') {
       try {
@@ -157,7 +215,7 @@ export async function saveCoursesToDatabase(
           .gte('start_time', weekStart.toISOString())
           .lt('start_time', weekEnd.toISOString());
       } catch (err) {
-        console.warn('Erreur soft-delete Supabase week:', err);
+        console.warn('Erreur soft-delete Supabase week range:', err);
       }
     }
   }

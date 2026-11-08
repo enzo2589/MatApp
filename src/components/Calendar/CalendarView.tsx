@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, saveLocalEvent, deleteLocalEvent, getCurrentUserId } from '../../db/localDb';
 import { EventItem, CalendarViewMode } from '../../types';
+import { isGhostCourse } from '../../services/timetable/store';
 import { WeekGrid } from './WeekGrid';
 import { MonthGrid } from './MonthGrid';
 import { QuickEventModal } from '../QuickEventModal';
@@ -63,10 +64,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEventData, setSelectedEventData] = useState<Partial<EventItem> | null>(null);
 
-  // Live Query Dexie réactif instantané (0 ms) STRICTEMENT filtré par utilisateur
+  // Live Query Dexie réactif instantané (0 ms) STRICTEMENT filtré par utilisateur et sans fantômes corrompus
   const activeUserId = userId || getCurrentUserId();
   const events = useLiveQuery(
-    () => db.events.where('user_id').equals(activeUserId).filter((e) => !e.is_deleted).toArray(),
+    () =>
+      db.events
+        .where('user_id')
+        .equals(activeUserId)
+        .filter((e) => !e.is_deleted && !isGhostCourse(e))
+        .toArray(),
     [activeUserId]
   );
 
