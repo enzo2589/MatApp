@@ -160,6 +160,30 @@ export const PASS_LILLE_WEEK_43_COURSES: ParsedCourseEvent[] = [
   },
 ];
 
+export const PROF_REGEX =
+  /^(?:Pr|Dr|M\.|Mme|Prof)\b|Nicolas\s+Pottier|Philippe\s+Marchetti|R[ée]jane\s+Paumelle(?:\s+Lestrelin)?|M\.?Aubert-Baillot|Vincent\s+Deramecourt|Philippe\s+Derambure|Nicolas\s+Willand|M\s+Bertrand|Herteleer|Devinant|Deplanque|Thierry\s+Dine|Notredame\s+Charles-Edouard/i;
+
+export const KNOWN_SUBJECTS = [
+  'chimie et biochimie médicale',
+  'biologie cellulaire et histologie',
+  'métiers et système de santé',
+  'santé société humanité',
+  'pharmacologie',
+  'anatomie',
+  'biophysique',
+  'ssh',
+  'formation d’ouverture',
+  'formation d\'ouverture',
+];
+
+export function isSubjectLine(str: string): boolean {
+  const s = str.trim().toLowerCase();
+  return (
+    /^bcc\d|^ue\d/i.test(s) ||
+    KNOWN_SUBJECTS.some((ks) => s === ks || s.startsWith(ks))
+  );
+}
+
 /**
  * Fusionne intelligemment les créneaux consécutifs du même cours et même enseignant
  * Ex: Pharmacologie 10h-11h + Pharmacologie 11h-12h -> Pharmacologie 10h-12h (créneau unique de 2h)
@@ -202,29 +226,41 @@ export function mergeConsecutiveCourses(courses: ParsedCourseEvent[]): ParsedCou
           next.subject.includes(current.subject));
 
       // Titre compatible (ex: "Pharmacologie" ou "Anatomie")
-      const currentPrefix = current.title.split(':')[0].trim().toLowerCase();
-      const nextPrefix = next.title.split(':')[0].trim().toLowerCase();
-      const sameTitleBase = currentPrefix === nextPrefix || currentPrefix.includes(nextPrefix);
+      const cleanPrefix = (str: string) => str.split(':')[0].trim().toLowerCase();
+      const sameTitle =
+        cleanPrefix(current.title) === cleanPrefix(next.title) ||
+        current.title.toLowerCase().includes(cleanPrefix(next.title)) ||
+        next.title.toLowerCase().includes(cleanPrefix(current.title));
 
-      if (isContiguous && (sameProf || (sameSubject && sameTitleBase))) {
+      // Ne pas fusionner si les professeurs sont différents
+      const differentProf =
+        current.professor &&
+        next.professor &&
+        current.professor.toLowerCase().trim() !== next.professor.toLowerCase().trim();
+
+      if (isContiguous && !differentProf && (sameProf || (sameSubject && sameTitle))) {
         // Étendre l'heure de fin
         current.endTime = next.endTime;
 
-        // Combiner les titres pour que tout le contenu soit visible
-        const currentDetail = current.title.includes(':')
-          ? current.title.split(':')[1].trim()
-          : current.title;
-        const nextDetail = next.title.includes(':')
-          ? next.title.split(':')[1].trim()
-          : next.title;
-
-        if (currentDetail !== nextDetail && !current.title.includes(nextDetail)) {
-          const baseName = current.title.includes(':') ? current.title.split(':')[0].trim() : current.title;
-          current.title = `${baseName} : ${currentDetail} & ${nextDetail}`;
-        }
-
         if (!current.professor && next.professor) {
           current.professor = next.professor;
+        }
+
+        const t1 = current.title.trim();
+        const t2 = next.title.trim();
+
+        if (t1.toLowerCase() === t2.toLowerCase() || t1.toLowerCase().includes(t2.toLowerCase())) {
+          // Déjà inclus ou identique
+        } else if (t2.toLowerCase().includes(t1.toLowerCase())) {
+          current.title = t2;
+        } else {
+          const p1 = t1.split(':').map((s) => s.trim());
+          const p2 = t2.split(':').map((s) => s.trim());
+          if (p1.length > 1 && p2.length > 1 && p1[0].toLowerCase() === p2[0].toLowerCase()) {
+            current.title = `${p1[0]} : ${p1.slice(1).join(' : ')} & ${p2.slice(1).join(' : ')}`;
+          } else {
+            current.title = `${t1} & ${t2}`;
+          }
         }
 
         // Absorber l'élément suivant
@@ -267,6 +303,9 @@ export function parse2DGridCourses(items: { text: string; x: number; y: number }
 
   // 2. Détection des colonnes de jours avec leurs vraies dates (ex: "lundi 19 octobre 2026")
   const dayRegex = /(lundi|mardi|mercredi|jeudi|vendredi|samedi)\s+(\d{1,2})\s+([a-zéû.]+)(?:\s+(\d{4}))?/i;
+  const singleDayRegex = /^(lundi|mardi|mercredi|jeudi|vendredi|samedi)$/i;
+  const singleDateRegex = /^(\d{1,2})\s+([a-zéû.]+)(?:\s+(\d{4}))?$/i;
+
   const dayMatches: { dayName: string; dayNum: number; monthIdx: number; year: number; x: number; y: number }[] = [];
 
   for (const it of items) {
@@ -278,6 +317,32 @@ export function parse2DGridCourses(items: { text: string; x: number; y: number }
       const yr = m[4] ? parseInt(m[4], 10) : detectedYear;
       const monthIdx = FRENCH_MONTHS[mName] !== undefined ? FRENCH_MONTHS[mName] : new Date().getMonth();
       dayMatches.push({ dayName: dName, dayNum: dNum, monthIdx, year: yr, x: it.x, y: it.y });
+    }
+  }
+
+  // Détection en 2 lignes (cas où l'OCR photo sépare "lundi" et "19 octobre")
+  if (dayMatches.length < 3) {
+    const dayNameItems = items.filter((it) => singleDayRegex.test(it.text));
+    for (const dIt of dayNameItems) {
+      const dName = dIt.text.toLowerCase();
+      const nearbyDate = items.find(
+        (it) =>
+          singleDateRegex.test(it.text) &&
+          Math.abs(it.x - dIt.x) < 50 &&
+          Math.abs(it.y - dIt.y) < 60
+      );
+      if (nearbyDate) {
+        const dm = nearbyDate.text.match(singleDateRegex);
+        if (dm) {
+          const dNum = parseInt(dm[1], 10);
+          const mName = dm[2].toLowerCase();
+          const yr = dm[3] ? parseInt(dm[3], 10) : detectedYear;
+          const monthIdx = FRENCH_MONTHS[mName] !== undefined ? FRENCH_MONTHS[mName] : new Date().getMonth();
+          if (!dayMatches.some((dmMatch) => dmMatch.dayName === dName)) {
+            dayMatches.push({ dayName: dName, dayNum: dNum, monthIdx, year: yr, x: dIt.x, y: dIt.y });
+          }
+        }
+      }
     }
   }
 
@@ -398,18 +463,33 @@ export function parse2DGridCourses(items: { text: string; x: number; y: number }
           continue;
         }
 
+        // Cas Jour Férié
+        if (lines.some((l) => /férié|ferie/i.test(l))) {
+          rawCourses.push({
+            id: `pass-${col.isoDate}-${slot.startH}-ferie`,
+            title: 'Jour Férié',
+            subject: 'Férié',
+            professor: '',
+            startTime: `${col.isoDate}T${String(slot.startH).padStart(2, '0')}:${String(slot.startM).padStart(2, '0')}:00`,
+            endTime: `${col.isoDate}T${String(slot.endH).padStart(2, '0')}:${String(slot.endM).padStart(2, '0')}:00`,
+            color: 'bu',
+            category: 'Férié',
+          });
+          continue;
+        }
+
         let bcc = '';
+        let detectedSubject = '';
         let prof = '';
         const rawTitles: string[] = [];
 
         for (const line of lines) {
           if (/^BCC\d|^UE\d/i.test(line)) {
             bcc = line;
-          } else if (
-            /^(Pr|Dr|M\.|Mme|Prof)\s+/i.test(line) ||
-            /Vincent\s+Deramecourt|Philippe\s+Derambure|Nicolas\s+Willand|Bertrand|Herteleer|Devinant|Deplanque/i.test(line)
-          ) {
+          } else if (PROF_REGEX.test(line)) {
             prof = line;
+          } else if (isSubjectLine(line)) {
+            detectedSubject = line;
           } else if (
             line !== '---' &&
             !/pass@univ-lille/i.test(line) &&
@@ -426,17 +506,29 @@ export function parse2DGridCourses(items: { text: string; x: number; y: number }
           }
         }
 
-        let title = cleanTitles.length > 0 ? cleanTitles.join(' : ') : bcc || 'Cours Faculté';
-        let subject = bcc ? bcc : 'Faculté de Médecine';
+        const subjectParts = [bcc, detectedSubject].filter(Boolean);
+        const finalSubject = subjectParts.join(' - ') || 'Faculté de Médecine';
+        let title = cleanTitles.length > 0 ? cleanTitles.join(' : ') : detectedSubject || bcc || 'Cours Faculté';
+
+        if (title.toLowerCase() === 'généralités' || title.toLowerCase() === 'generalites') {
+          title = detectedSubject ? `${detectedSubject} : Généralités` : 'Anatomie générale : Généralités';
+        } else if (title.toLowerCase() === 'étique' || title.toLowerCase() === 'éthique') {
+          title = 'Éthique médicale';
+        } else if (title.toLowerCase() === 'anthropologie') {
+          title = 'Anthropologie & Société';
+        }
 
         let color = 'cours';
         const titleLower = title.toLowerCase();
+        const subjectLower = finalSubject.toLowerCase();
         if (
           titleLower.includes('ssh') ||
           titleLower.includes('anthropologie') ||
           titleLower.includes('éthique') ||
           titleLower.includes('étique') ||
-          titleLower.includes('tutorat')
+          titleLower.includes('tutorat') ||
+          subjectLower.includes('ssh') ||
+          subjectLower.includes('santé société humanité')
         ) {
           color = 'tutorat';
         } else if (titleLower.includes('stage') || titleLower.includes('clinique') || titleLower.includes('hôpital')) {
@@ -449,7 +541,7 @@ export function parse2DGridCourses(items: { text: string; x: number; y: number }
         rawCourses.push({
           id: `pass-${col.isoDate}-${slot.startH}`,
           title,
-          subject,
+          subject: finalSubject,
           professor: prof,
           startTime: startIso,
           endTime: endIso,
@@ -500,9 +592,11 @@ export async function parsePDFTimetable(file: File): Promise<ParsedCourseEvent[]
       } as any).promise;
     }
 
-    let allItems: { text: string; x: number; y: number }[] = [];
+    let allCourses: ParsedCourseEvent[] = [];
     let fullText = '';
 
+    // Analyse chaque page individuellement pour éviter toute interférence de coordonnées
+    // entre le bloc du matin (Page 1) et celui de l'après-midi (Page 2)
     for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
       const page = await pdfDoc.getPage(pageNum);
       const textContent = await page.getTextContent();
@@ -514,14 +608,13 @@ export async function parsePDFTimetable(file: File): Promise<ParsedCourseEvent[]
           y: Math.round(item.transform[5]),
         }));
 
-      allItems = allItems.concat(pageItems);
+      const pageCourses = parse2DGridCourses(pageItems);
+      allCourses = allCourses.concat(pageCourses);
       fullText += textContent.items.map((item: any) => item.str).join(' ') + '\n';
     }
 
-    // 1. Analyse 2D haute fidélité (colonnes et créneaux)
-    const gridCourses = parse2DGridCourses(allItems);
-    if (gridCourses.length > 0) {
-      return gridCourses;
+    if (allCourses.length > 0) {
+      return mergeConsecutiveCourses(allCourses);
     }
 
     // 2. Repli : analyse textuelle ligne par ligne
@@ -728,12 +821,9 @@ export function parseTimetableText(rawText: string, referenceMonday?: Date): Par
       }
 
       for (const cand of surroundingCandidates) {
-        if (
-          /^(Pr|Dr|M\.|Mme|Prof)\s+/i.test(cand) ||
-          /Deramecourt|Derambure|Willand|Bertrand|Herteleer|Devinant|Deplanque/i.test(cand)
-        ) {
+        if (PROF_REGEX.test(cand)) {
           prof = cand;
-        } else if (/^BCC\d|^UE\d/i.test(cand)) {
+        } else if (/^BCC\d|^UE\d/i.test(cand) || isSubjectLine(cand)) {
           subject = cand;
         } else if (/^(Amphi|Salle|Bâtiment|Pole|Labo)\s+/i.test(cand)) {
           room = cand;
