@@ -110,6 +110,183 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     startY: number;
   } | null>(null);
 
+  // Référence sur le conteneur de grille pour le calcul mathématique des coordonnées
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // État de déplacement par appui long (Long-Press Drag & Drop sur iPad & Desktop)
+  interface MovingEventState {
+    event: EventItem;
+    durationMinutes: number;
+    originalDay: Date;
+    originalStartMinutes: number;
+    targetDay: Date;
+    targetStartMinutes: number;
+    grabOffsetY: number;
+    currentPointerX: number;
+    currentPointerY: number;
+  }
+
+  const [movingEvent, setMovingEvent] = useState<MovingEventState | null>(null);
+  const movingEventRef = useRef<MovingEventState | null>(null);
+  movingEventRef.current = movingEvent;
+
+  const longPressTimerRef = useRef<number | null>(null);
+  const pressStartRef = useRef<{
+    x: number;
+    y: number;
+    pointerId: number;
+    grabOffsetY: number;
+    event: EventItem;
+    durationMinutes: number;
+    originalStartMinutes: number;
+    startDay: Date;
+    targetEl: HTMLElement;
+  } | null>(null);
+  const didDragRef = useRef(false);
+
+  // Nettoyage du timer d'appui long au démontage
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Calcul mathématique précis du jour et de l'heure ciblés
+  const calculateTargetSlot = useCallback(
+    (clientX: number, clientY: number, durationMinutes: number, grabOffsetY: number) => {
+      if (!gridRef.current) return null;
+      const gridRect = gridRef.current.getBoundingClientRect();
+
+      // 1. Jour ciblé (axe horizontal X)
+      const relX = clientX - gridRect.left;
+      const colWidth = gridRect.width / days.length;
+      const colIdx = Math.max(0, Math.min(days.length - 1, Math.floor(relX / colWidth)));
+      const targetDay = days[colIdx];
+
+      // 2. Heure ciblée (axe vertical Y)
+      const cardTopInGrid = clientY - grabOffsetY - gridRect.top;
+      const exactMinutes = (cardTopInGrid / hourHeight) * 60;
+      const snapStep = hourHeight >= 130 ? 5 : 15;
+      const snappedMinutes = Math.max(
+        0,
+        Math.min(1440 - durationMinutes, Math.round(exactMinutes / snapStep) * snapStep)
+      );
+
+      return { targetDay, targetStartMinutes: snappedMinutes };
+    },
+    [days, hourHeight]
+  );
+
+  // Défilement automatique fluide et suivi global du pointeur lors du déplacement
+  useEffect(() => {
+    if (!movingEvent) return;
+
+    let animId: number;
+    const checkAutoScroll = () => {
+      if (!containerRef.current || !movingEventRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const y = movingEventRef.current.currentPointerY;
+
+      const topDist = y - rect.top;
+      const bottomDist = rect.bottom - y;
+
+      if (topDist < 75 && topDist > -40) {
+        const speed = Math.max(3, Math.round((75 - topDist) / 4));
+        containerRef.current.scrollTop -= speed;
+      } else if (bottomDist < 75 && bottomDist > -40) {
+        const speed = Math.max(3, Math.round((75 - bottomDist) / 4));
+        containerRef.current.scrollTop += speed;
+      }
+
+      animId = requestAnimationFrame(checkAutoScroll);
+    };
+
+    animId = requestAnimationFrame(checkAutoScroll);
+
+    const handleGlobalMove = (e: PointerEvent) => {
+      const currentMove = movingEventRef.current;
+      if (!currentMove) return;
+
+      const slot = calculateTargetSlot(
+        e.clientX,
+        e.clientY,
+        currentMove.durationMinutes,
+        currentMove.grabOffsetY
+      );
+
+      if (slot) {
+        setMovingEvent((prev) =>
+          prev
+            ? {
+                ...prev,
+                targetDay: slot.targetDay,
+                targetStartMinutes: slot.targetStartMinutes,
+                currentPointerX: e.clientX,
+                currentPointerY: e.clientY,
+              }
+            : null
+        );
+      }
+    };
+
+    const handleGlobalUp = async () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+
+      const currentMove = movingEventRef.current;
+      if (!currentMove) return;
+
+      setMovingEvent(null);
+      pressStartRef.current = null;
+
+      const { event, durationMinutes, originalDay, originalStartMinutes, targetDay, targetStartMinutes } =
+        currentMove;
+
+      const originalDayKey = format(originalDay, 'yyyy-MM-dd');
+      const targetDayKey = format(targetDay, 'yyyy-MM-dd');
+
+      if (originalDayKey !== targetDayKey || originalStartMinutes !== targetStartMinutes) {
+        const startH = Math.floor(targetStartMinutes / 60);
+        const startM = targetStartMinutes % 60;
+        const newStartDate = setMinutes(setHours(targetDay, startH), startM);
+        const newEndDate = addMinutes(newStartDate, durationMinutes);
+
+        const updated: EventItem = {
+          ...event,
+          start_time: newStartDate.toISOString(),
+          end_time: newEndDate.toISOString(),
+        };
+
+        await saveLocalEvent(updated);
+
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          try {
+            navigator.vibrate(25);
+          } catch {}
+        }
+      }
+
+      setTimeout(() => {
+        didDragRef.current = false;
+      }, 150);
+    };
+
+    window.addEventListener('pointermove', handleGlobalMove);
+    window.addEventListener('pointerup', handleGlobalUp);
+    window.addEventListener('pointercancel', handleGlobalUp);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener('pointermove', handleGlobalMove);
+      window.removeEventListener('pointerup', handleGlobalUp);
+      window.removeEventListener('pointercancel', handleGlobalUp);
+    };
+  }, [!movingEvent, calculateTargetSlot]);
+
   // Défilement automatique au chargement vers 07:30
   useEffect(() => {
     if (containerRef.current) {
@@ -348,6 +525,175 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   };
 
   // --------------------------------------------------------------------------
+  // GESTION TACTILE IPAD & DESKTOP : DÉPLACEMENT PAR APPUI LONG (LONG-PRESS DRAG)
+  // --------------------------------------------------------------------------
+  const handleEventPointerDown = (e: React.PointerEvent, event: EventItem) => {
+    if (e.button !== 0) return;
+    if (
+      (e.target as HTMLElement).closest('.event-resize-handle') ||
+      (e.target as HTMLElement).closest('button')
+    ) {
+      return;
+    }
+
+    const cardEl = e.currentTarget as HTMLElement;
+    const cardRect = cardEl.getBoundingClientRect();
+    const grabOffsetY = e.clientY - cardRect.top;
+
+    const start = parseISO(event.start_time);
+    const end = parseISO(event.end_time);
+    const durationMinutes = Math.max(15, differenceInMinutes(end, start));
+    const originalStartMinutes = start.getHours() * 60 + Math.round(start.getMinutes() / 5) * 5;
+
+    pressStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      pointerId: e.pointerId,
+      grabOffsetY,
+      event,
+      durationMinutes,
+      originalStartMinutes,
+      startDay: start,
+      targetEl: cardEl,
+    };
+    didDragRef.current = false;
+
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+
+    // Déclenchement de l'appui long après 350ms
+    longPressTimerRef.current = window.setTimeout(() => {
+      if (!pressStartRef.current) return;
+
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate(40);
+        } catch {}
+      }
+
+      try {
+        cardEl.setPointerCapture(e.pointerId);
+      } catch {}
+
+      setQuickInspectEvent(null);
+
+      const initialSlot = calculateTargetSlot(e.clientX, e.clientY, durationMinutes, grabOffsetY);
+
+      setMovingEvent({
+        event,
+        durationMinutes,
+        originalDay: start,
+        originalStartMinutes,
+        targetDay: initialSlot?.targetDay || start,
+        targetStartMinutes: initialSlot?.targetStartMinutes ?? originalStartMinutes,
+        grabOffsetY,
+        currentPointerX: e.clientX,
+        currentPointerY: e.clientY,
+      });
+
+      didDragRef.current = true;
+    }, 350);
+  };
+
+  const handleEventPointerMove = (e: React.PointerEvent) => {
+    if (longPressTimerRef.current && pressStartRef.current && !movingEvent) {
+      const dist = Math.hypot(e.clientX - pressStartRef.current.x, e.clientY - pressStartRef.current.y);
+      if (dist > 8) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+        pressStartRef.current = null;
+      }
+      return;
+    }
+
+    if (movingEvent) {
+      const slot = calculateTargetSlot(
+        e.clientX,
+        e.clientY,
+        movingEvent.durationMinutes,
+        movingEvent.grabOffsetY
+      );
+
+      if (slot) {
+        setMovingEvent((prev) =>
+          prev
+            ? {
+                ...prev,
+                targetDay: slot.targetDay,
+                targetStartMinutes: slot.targetStartMinutes,
+                currentPointerX: e.clientX,
+                currentPointerY: e.clientY,
+              }
+            : null
+        );
+      }
+    }
+  };
+
+  const handleEventPointerUp = async (e: React.PointerEvent) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    if (!movingEvent) {
+      pressStartRef.current = null;
+      return;
+    }
+
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+
+    const { event, durationMinutes, originalDay, originalStartMinutes, targetDay, targetStartMinutes } =
+      movingEvent;
+    setMovingEvent(null);
+    pressStartRef.current = null;
+
+    const originalDayKey = format(originalDay, 'yyyy-MM-dd');
+    const targetDayKey = format(targetDay, 'yyyy-MM-dd');
+
+    if (originalDayKey !== targetDayKey || originalStartMinutes !== targetStartMinutes) {
+      const startH = Math.floor(targetStartMinutes / 60);
+      const startM = targetStartMinutes % 60;
+      const newStartDate = setMinutes(setHours(targetDay, startH), startM);
+      const newEndDate = addMinutes(newStartDate, durationMinutes);
+
+      const updated: EventItem = {
+        ...event,
+        start_time: newStartDate.toISOString(),
+        end_time: newEndDate.toISOString(),
+      };
+
+      await saveLocalEvent(updated);
+
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate(25);
+        } catch {}
+      }
+    }
+
+    setTimeout(() => {
+      didDragRef.current = false;
+    }, 150);
+  };
+
+  const handleEventPointerCancel = (e: React.PointerEvent) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+    setMovingEvent(null);
+    pressStartRef.current = null;
+    didDragRef.current = false;
+  };
+
+  // --------------------------------------------------------------------------
   // GESTION TACTILE IPAD : REDIMENSIONNEMENT PAR POIGNÉE BASSE (RESIZE HANDLE)
   // --------------------------------------------------------------------------
   const handleResizePointerDown = (e: React.PointerEvent, event: EventItem) => {
@@ -563,7 +909,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
         </div>
 
         {/* Grille principale des jours */}
-        <div className="flex-1 grid grid-flow-col auto-cols-fr divide-x divide-slate-100 relative">
+        <div ref={gridRef} className="flex-1 grid grid-flow-col auto-cols-fr divide-x divide-slate-100 relative">
           {days.map((day) => {
             const dayKey = format(day, 'yyyy-MM-dd');
             const dayLayouts = eventsByDay.get(dayKey) || [];
@@ -629,6 +975,33 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                   </div>
                 )}
 
+                {/* ZONE CIBLE DE DÉPLACEMENT EN TEMPS RÉEL (Drop Target Preview lors de l'appui long) */}
+                {movingEvent && isSameDay(movingEvent.targetDay, day) && (
+                  <div
+                    style={{
+                      top: `${(movingEvent.targetStartMinutes / 60) * hourHeight}px`,
+                      height: `${Math.max(28, (movingEvent.durationMinutes / 60) * hourHeight)}px`,
+                    }}
+                    className="absolute inset-x-1.5 z-25 rounded-2xl border-2 border-dashed border-indigo-600 bg-indigo-500/20 backdrop-blur-[1px] shadow-lg flex flex-col justify-between p-2 pointer-events-none transition-all duration-75 animate-pulse"
+                  >
+                    <div className="flex items-center gap-1.5 text-indigo-950 font-black text-xs truncate">
+                      <MoveVertical className="w-3.5 h-3.5 text-indigo-600 shrink-0 animate-bounce" />
+                      <span className="truncate">{movingEvent.event.title}</span>
+                    </div>
+                    <div className="text-[10px] font-black text-indigo-950 bg-white/95 px-2 py-0.5 rounded-md self-start shadow-xs flex items-center gap-1">
+                      <span>
+                        {Math.floor(movingEvent.targetStartMinutes / 60).toString().padStart(2, '0')}:
+                        {(movingEvent.targetStartMinutes % 60).toString().padStart(2, '0')} →{' '}
+                        {Math.floor((movingEvent.targetStartMinutes + movingEvent.durationMinutes) / 60).toString().padStart(2, '0')}:
+                        {((movingEvent.targetStartMinutes + movingEvent.durationMinutes) % 60).toString().padStart(2, '0')}
+                      </span>
+                      <span className="opacity-70 font-bold">
+                        ({movingEvent.durationMinutes >= 60 ? `${Math.floor(movingEvent.durationMinutes / 60)}h${movingEvent.durationMinutes % 60 ? movingEvent.durationMinutes % 60 : ''}` : `${movingEvent.durationMinutes}m`})
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Cartes d'événements */}
                 {dayLayouts.map(({ event, top, height, column, totalColumns }) => {
                   const theme = getColorTheme(event.color);
@@ -636,6 +1009,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                   const leftPercent = column * widthPercent;
                   const durationMins = differenceInMinutes(parseISO(event.end_time), parseISO(event.start_time));
                   const isInspected = quickInspectEvent?.id === event.id;
+                  const isBeingMoved = movingEvent?.event.id === event.id;
 
                   // Extraire la matière et le professeur de la description
                   const descParts = event.description ? event.description.split('•').map((s) => s.trim()) : [];
@@ -645,8 +1019,16 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                   return (
                     <div
                       key={event.id}
+                      onPointerDown={(e) => handleEventPointerDown(e, event)}
+                      onPointerMove={handleEventPointerMove}
+                      onPointerUp={handleEventPointerUp}
+                      onPointerCancel={handleEventPointerCancel}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (didDragRef.current || movingEvent) return;
                         setQuickInspectEvent(event);
                       }}
                       style={{
@@ -656,12 +1038,16 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                         width: `${widthPercent - 1.5}%`,
                         backgroundColor: theme.bgPastel,
                         borderLeftColor: theme.borderAccent,
+                        WebkitTouchCallout: 'none',
+                        touchAction: 'pan-y',
                       }}
                       className={clsx(
                         'event-card absolute z-10 rounded-2xl p-2.5 sm:p-3 shadow-xs border-l-[5px] border-t border-r border-b border-black/5 transition-all duration-150',
-                        'hover:shadow-lg hover:scale-[1.01] hover:z-20 cursor-pointer overflow-hidden flex flex-col justify-between select-none',
-                        isInspected && 'ring-2 ring-indigo-500 shadow-apple-lg z-30'
+                        'hover:shadow-lg hover:scale-[1.01] hover:z-20 cursor-pointer overflow-hidden flex flex-col justify-between select-none active:scale-[0.98]',
+                        isInspected && 'ring-2 ring-indigo-500 shadow-apple-lg z-30',
+                        isBeingMoved && 'opacity-25 border-dashed ring-2 ring-indigo-500/50 scale-[0.97]'
                       )}
+                      title="Appui long pour déplacer cette activité sur l'emploi du temps"
                     >
                       {/* Corps supérieur de l'événement */}
                       <div className="min-w-0 pointer-events-none space-y-1">
@@ -949,6 +1335,46 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+      {/* CARTE FLOTTANTE EN COURS DE DÉPLACEMENT SOUS LE DOIGT */}
+      {movingEvent && (
+        <div
+          style={{
+            position: 'fixed',
+            left: `${movingEvent.currentPointerX - 110}px`,
+            top: `${movingEvent.currentPointerY - movingEvent.grabOffsetY - 12}px`,
+            width: '230px',
+            pointerEvents: 'none',
+            zIndex: 9999,
+            backgroundColor: getColorTheme(movingEvent.event.color).bgPastel,
+            borderLeftColor: getColorTheme(movingEvent.event.color).borderAccent,
+          }}
+          className="rounded-2xl p-3 shadow-2xl border-l-[6px] border-t border-r border-b border-indigo-400/50 ring-4 ring-indigo-500/30 scale-105 rotate-1 transition-transform select-none backdrop-blur-md"
+        >
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span
+              className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded truncate max-w-[130px]"
+              style={{
+                backgroundColor: getColorTheme(movingEvent.event.color).badgeBg,
+                color: getColorTheme(movingEvent.event.color).textColor,
+              }}
+            >
+              {movingEvent.event.title}
+            </span>
+            <span className="text-[10px] font-extrabold text-indigo-700 bg-white/95 px-1.5 py-0.5 rounded shadow-2xs">
+              {format(movingEvent.targetDay, 'EEEE d', { locale: fr })}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-900 bg-white/85 px-2 py-0.5 rounded-md w-fit shadow-2xs">
+            <Clock className="w-3 h-3 text-indigo-600 shrink-0" />
+            <span>
+              {Math.floor(movingEvent.targetStartMinutes / 60).toString().padStart(2, '0')}:
+              {(movingEvent.targetStartMinutes % 60).toString().padStart(2, '0')} -{' '}
+              {Math.floor((movingEvent.targetStartMinutes + movingEvent.durationMinutes) / 60).toString().padStart(2, '0')}:
+              {((movingEvent.targetStartMinutes + movingEvent.durationMinutes) % 60).toString().padStart(2, '0')}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
