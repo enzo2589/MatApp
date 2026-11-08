@@ -12,6 +12,7 @@ import { MiniMonthPicker } from './components/Calendar/MiniMonthPicker';
 import { CustomImageWidget } from './components/StudentWidget/CustomImageWidget';
 import { SettingsModal } from './components/SettingsModal';
 import { TimetableImportModal } from './components/TimetableImportModal';
+import { purgeCorruptedGhostEvents } from './services/timetable/store';
 import { AlarmBanner } from './components/AlarmBanner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarCheck, CalendarDays, CheckSquare, Sparkles, Calendar } from 'lucide-react';
@@ -50,6 +51,7 @@ export function App() {
   // Initialisation et vérification de la session en arrière-plan
   useEffect(() => {
     alarmService.startAlarmLoop();
+    purgeCorruptedGhostEvents().catch(() => {});
 
     // Vérifier la session Supabase active en arrière-plan
     getAuthUser().then((user) => {

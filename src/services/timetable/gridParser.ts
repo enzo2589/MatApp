@@ -385,16 +385,17 @@ export function mergeConsecutiveCourses(courses: ParsedCourseEvent[]): ParsedCou
         current.title.toLowerCase().includes(cleanPrefix(next.title)) ||
         next.title.toLowerCase().includes(cleanPrefix(current.title));
 
-      // Ne pas fusionner si les professeurs sont différents
-      const differentProf =
-        current.professor &&
-        next.professor &&
-        current.professor.toLowerCase().trim() !== next.professor.toLowerCase().trim();
+      // On fusionne si les créneaux sont contigus ET :
+      // - même enseignant, OU
+      // - même matière et même titre principal (ex: Biologie cellulaire Noyau 3 & Mitochondrie 1)
+      const samePrefix = cleanPrefix(current.title) === cleanPrefix(next.title);
 
-      if (isContiguous && !differentProf && (sameProf || (sameSubject && sameTitle))) {
+      if (isContiguous && (sameProf || (sameSubject && (sameTitle || samePrefix)))) {
         current.endTime = next.endTime;
 
-        if (!current.professor && next.professor) {
+        if (current.professor && next.professor && current.professor.toLowerCase().trim() !== next.professor.toLowerCase().trim()) {
+          current.professor = `${current.professor} & ${next.professor}`;
+        } else if (!current.professor && next.professor) {
           current.professor = next.professor;
         }
 
