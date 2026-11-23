@@ -188,6 +188,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     targetEl: HTMLElement;
   } | null>(null);
   const didDragRef = useRef(false);
+  const lastCardDragEndTimeRef = useRef<number>(0);
 
   // Nettoyage des timers au démontage
   useEffect(() => {
@@ -321,9 +322,10 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
         }
       }
 
+      lastCardDragEndTimeRef.current = Date.now();
       setTimeout(() => {
         didDragRef.current = false;
-      }, 150);
+      }, 500);
     };
 
     window.addEventListener('pointermove', handleGlobalMove);
@@ -443,6 +445,15 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   // - À LA SOURIS (mouse) : Clic ou glisser pour créer un créneau.
   // --------------------------------------------------------------------------
   const handleSlotPointerDown = (e: React.PointerEvent<HTMLDivElement>, day: Date) => {
+    // Si une carte d'activité est ou vient d'être déplacée : ne JAMAIS déclencher de création de créneau
+    if (
+      movingEventRef.current ||
+      didDragRef.current ||
+      Date.now() - lastCardDragEndTimeRef.current < 600
+    ) {
+      return;
+    }
+
     // Si clic sur carte d'événement ou poignée, laisser faire l'événement
     if ((e.target as HTMLElement).closest('.event-card') || (e.target as HTMLElement).closest('.quick-inspector')) {
       return;
@@ -619,6 +630,16 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     }
     slotLongPressStartRef.current = null;
 
+    // Si une carte d'activité est ou vient d'être déplacée : ne JAMAIS ouvrir la pop-up de création
+    if (
+      movingEventRef.current ||
+      didDragRef.current ||
+      Date.now() - lastCardDragEndTimeRef.current < 600
+    ) {
+      setDragCreation(null);
+      return;
+    }
+
     // Si création active (double-tap glissé au stylet ou clic-glissé souris)
     if (dragCreation) {
       try {
@@ -645,23 +666,6 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       onSelectSlot(startTime, endTime);
       return;
     }
-
-    // Si clic simple à la souris sur PC sans glisser
-    if (e.pointerType === 'mouse') {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickY = e.clientY - rect.top;
-      const exactMinutes = (clickY / hourHeight) * 60;
-      const snappedMinutes = Math.min(1435, Math.max(0, Math.floor(exactMinutes / 5) * 5));
-      const startHours = Math.floor(snappedMinutes / 60);
-      const startMins = snappedMinutes % 60;
-      const dayKey = e.currentTarget.getAttribute('data-daykey');
-      const targetDay = days.find((d) => format(d, 'yyyy-MM-dd') === dayKey);
-      if (targetDay) {
-        const startTime = setMinutes(setHours(targetDay, startHours), startMins);
-        const endTime = addMinutes(startTime, 60);
-        onSelectSlot(startTime, endTime);
-      }
-    }
   };
 
   const handleSlotPointerCancel = () => {
@@ -678,6 +682,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   // GESTION TACTILE IPAD & DESKTOP : DÉPLACEMENT PAR APPUI LONG (LONG-PRESS DRAG)
   // --------------------------------------------------------------------------
   const handleEventPointerDown = (e: React.PointerEvent, event: EventItem) => {
+    e.stopPropagation();
     if (e.button !== 0) return;
     if (
       (e.target as HTMLElement).closest('.event-resize-handle') ||
@@ -789,6 +794,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   };
 
   const handleEventPointerUp = async (e: React.PointerEvent) => {
+    e.stopPropagation();
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -801,6 +807,8 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       onMovingEventChange?.(false);
       return;
     }
+
+    lastCardDragEndTimeRef.current = Date.now();
 
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -836,12 +844,14 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       }
     }
 
+    lastCardDragEndTimeRef.current = Date.now();
     setTimeout(() => {
       didDragRef.current = false;
-    }, 150);
+    }, 500);
   };
 
   const handleEventPointerCancel = (e: React.PointerEvent) => {
+    e.stopPropagation();
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -853,6 +863,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     setIsPressingEventId(null);
     pressStartRef.current = null;
     didDragRef.current = false;
+    lastCardDragEndTimeRef.current = Date.now();
     onMovingEventChange?.(false);
   };
 
@@ -1192,7 +1203,13 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (didDragRef.current || movingEvent) return;
+                        if (
+                          didDragRef.current ||
+                          movingEvent ||
+                          Date.now() - lastCardDragEndTimeRef.current < 600
+                        ) {
+                          return;
+                        }
                         setQuickInspectEvent(event);
                       }}
                       style={{
