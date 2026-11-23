@@ -69,6 +69,7 @@ export function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isMobileTodoOpen, setIsMobileTodoOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'calendar' | 'sidebar' | 'todo'>('calendar');
+  const [activeFocusView, setActiveFocusView] = useState<'all' | 'calendar' | 'todo' | 'month'>('all');
 
   const handleUpdateCurrentDate = (newDate: Date) => {
     setCurrentDate(newDate);
@@ -194,16 +195,21 @@ export function App() {
         pendingTasksCount={pendingTasksCount}
         userEmail={currentUser?.email || null}
         onSignOut={handleSignOut}
+        onResetView={() => setActiveFocusView('all')}
+        activeFocusView={activeFocusView}
       />
 
       {/* Barre d'onglets mobile (sur iPhone / petits écrans) */}
       <div className="md:hidden flex border-b border-slate-200 bg-white px-2 py-1 gap-1">
         <button
           type="button"
-          onClick={() => setMobileTab('calendar')}
+          onClick={() => {
+            setMobileTab('calendar');
+            setActiveFocusView('all');
+          }}
           className={clsx(
             'flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all',
-            mobileTab === 'calendar'
+            mobileTab === 'calendar' && activeFocusView !== 'todo'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           )}
@@ -214,10 +220,13 @@ export function App() {
 
         <button
           type="button"
-          onClick={() => setMobileTab('sidebar')}
+          onClick={() => {
+            setMobileTab('sidebar');
+            setActiveFocusView('all');
+          }}
           className={clsx(
             'flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all',
-            mobileTab === 'sidebar'
+            mobileTab === 'sidebar' && activeFocusView !== 'todo'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           )}
@@ -228,10 +237,13 @@ export function App() {
 
         <button
           type="button"
-          onClick={() => setMobileTab('todo')}
+          onClick={() => {
+            setMobileTab('todo');
+            setActiveFocusView('todo');
+          }}
           className={clsx(
             'flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all relative',
-            mobileTab === 'todo'
+            mobileTab === 'todo' || activeFocusView === 'todo'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           )}
@@ -248,52 +260,81 @@ export function App() {
 
       {/* Zone Principale Responsive */}
       <main className="flex-1 flex overflow-hidden relative">
-        {/* PANNEAU GAUCHE (Desktop / iPad) */}
-        <aside
-          className={clsx(
-            'w-full md:w-[330px] lg:w-[360px] xl:w-[380px] h-full flex flex-col p-3 gap-3 overflow-y-auto bg-slate-100/90 border-r border-slate-200/90 shrink-0 select-none scrollbar-thin',
-            mobileTab === 'calendar' ? 'hidden md:flex' : 'flex'
-          )}
-        >
-          {/* Bloc 1 : "MOIS" */}
-          <div className={clsx(mobileTab === 'todo' ? 'hidden md:block' : 'block')}>
-            <MiniMonthPicker
-              currentDate={currentDate}
-              onSelectDate={(newDate) => {
-                handleUpdateCurrentDate(newDate);
-                setMobileTab('calendar');
-              }}
-              events={allEvents || []}
+        {/* MODE FOCUS 1 : TO-DO LIST EN GRAND FORMAT */}
+        {activeFocusView === 'todo' ? (
+          <div className="flex-1 h-full overflow-hidden p-3 md:p-6 lg:p-8 bg-slate-100/90 flex flex-col items-center justify-center animate-fadeIn">
+            <PersistentTodoList
+              isExpandedFull={true}
+              onToggleExpand={() => setActiveFocusView('all')}
+              userId={currentUserId}
             />
           </div>
+        ) : (
+          <>
+            {/* PANNEAU GAUCHE (Desktop / iPad) : Visible seulement si pas en plein écran Calendrier ou Mois */}
+            {activeFocusView === 'all' && (
+              <aside
+                className={clsx(
+                  'w-full md:w-[330px] lg:w-[360px] xl:w-[380px] h-full flex flex-col p-3 gap-3 overflow-y-auto bg-slate-100/90 border-r border-slate-200/90 shrink-0 select-none scrollbar-thin transition-all',
+                  mobileTab === 'calendar' ? 'hidden md:flex' : 'flex'
+                )}
+              >
+                {/* Bloc 1 : "MOIS" avec possibilité d'agrandir en grand */}
+                <div className={clsx(mobileTab === 'todo' ? 'hidden md:block' : 'block')}>
+                  <MiniMonthPicker
+                    currentDate={currentDate}
+                    onSelectDate={(newDate) => {
+                      handleUpdateCurrentDate(newDate);
+                      setMobileTab('calendar');
+                    }}
+                    events={allEvents || []}
+                    onExpand={() => setActiveFocusView('month')}
+                  />
+                </div>
 
-          {/* Bloc 2 : "IMAGE QUE JE CHOISIS" */}
-          <div className={clsx(mobileTab === 'todo' ? 'hidden md:block' : 'block')}>
-            <CustomImageWidget />
-          </div>
+                {/* Bloc 2 : "IMAGE MOTIVATION ET OBJECTIF" */}
+                <div className={clsx(mobileTab === 'todo' ? 'hidden md:block' : 'block')}>
+                  <CustomImageWidget />
+                </div>
 
-          {/* Bloc 3 : "TO DO LIST" */}
-          <div className={clsx('flex-1 min-h-[240px]', mobileTab === 'sidebar' ? 'hidden md:flex' : 'flex')}>
-            <PersistentTodoList isCompactInSidebar={true} userId={currentUserId} />
-          </div>
-        </aside>
+                {/* Bloc 3 : "TO DO LIST" avec possibilité d'agrandir en grand */}
+                <div className={clsx('flex-1 min-h-[240px]', mobileTab === 'sidebar' ? 'hidden md:flex' : 'flex')}>
+                  <PersistentTodoList
+                    isCompactInSidebar={true}
+                    userId={currentUserId}
+                    onToggleExpand={() => setActiveFocusView('todo')}
+                  />
+                </div>
+              </aside>
+            )}
 
-        {/* PANNEAU DROIT (Grand agenda interactif de la SEMAINE) */}
-        <div
-          className={clsx(
-            'flex-1 h-full flex flex-col overflow-hidden',
-            mobileTab !== 'calendar' ? 'hidden md:flex' : 'flex'
-          )}
-        >
-          <CalendarView
-            userId={currentUserId}
-            currentDate={currentDate}
-            onSelectDate={handleUpdateCurrentDate}
-            onOpenTodoList={() => setIsMobileTodoOpen(true)}
-            onOpenImportModal={() => setIsImportModalOpen(true)}
-            pendingTasksCount={pendingTasksCount}
-          />
-        </div>
+            {/* PANNEAU DROIT (Grand agenda interactif de la SEMAINE ou du MOIS) */}
+            <div
+              className={clsx(
+                'flex-1 h-full flex flex-col overflow-hidden',
+                mobileTab !== 'calendar' && activeFocusView === 'all' ? 'hidden md:flex' : 'flex'
+              )}
+            >
+              <CalendarView
+                userId={currentUserId}
+                currentDate={currentDate}
+                onSelectDate={handleUpdateCurrentDate}
+                onOpenTodoList={() => setIsMobileTodoOpen(true)}
+                onOpenImportModal={() => setIsImportModalOpen(true)}
+                pendingTasksCount={pendingTasksCount}
+                isExpandedFull={activeFocusView === 'calendar' || activeFocusView === 'month'}
+                forcedViewMode={activeFocusView === 'month' ? 'month' : undefined}
+                onToggleExpand={() => {
+                  if (activeFocusView === 'calendar' || activeFocusView === 'month') {
+                    setActiveFocusView('all');
+                  } else {
+                    setActiveFocusView('calendar');
+                  }
+                }}
+              />
+            </div>
+          </>
+        )}
 
         {/* Bouton Flottant Accessible au Pouce sur iPhone */}
         <div className="md:hidden fixed bottom-5 right-5 z-40 safe-bottom">

@@ -8,6 +8,7 @@ import {
   LogOut,
   User as UserIcon,
   GraduationCap,
+  LayoutGrid,
 } from 'lucide-react';
 import { alarmService } from '../services/alarmService';
 import { clsx } from 'clsx';
@@ -19,6 +20,8 @@ interface HeaderProps {
   pendingTasksCount: number;
   userEmail?: string | null;
   onSignOut?: () => void;
+  onResetView?: () => void;
+  activeFocusView?: 'all' | 'calendar' | 'todo' | 'month';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,6 +31,8 @@ export const Header: React.FC<HeaderProps> = ({
   pendingTasksCount,
   userEmail,
   onSignOut,
+  onResetView,
+  activeFocusView = 'all',
 }) => {
   const [hasNotifPermission, setHasNotifPermission] = useState(alarmService.hasNotificationPermission());
   const [justTested, setJustTested] = useState(false);
@@ -70,25 +75,48 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="bg-white border-b border-slate-200/90 px-3 md:px-6 py-2.5 flex items-center justify-between gap-3 select-none z-30 safe-top">
-      {/* Logo & Titre Études Santé */}
+      {/* Logo & Titre Études Santé (Cliquer réinitialise la vue principale avec tous les éléments) */}
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-          <Activity className="w-5 h-5 stroke-[2.5]" />
+        <div
+          onClick={onResetView}
+          className={clsx(
+            "flex items-center gap-3 group transition-all",
+            onResetView && "cursor-pointer"
+          )}
+          title={activeFocusView !== 'all' ? "Cliquer pour revenir à la vue d'ensemble" : "MatApp Santé"}
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 group-hover:scale-105 active:scale-95 transition-transform">
+            <Activity className="w-5 h-5 stroke-[2.5]" />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-base font-extrabold text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+                MatApp
+              </h1>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                Études Santé
+              </span>
+            </div>
+            <p className="hidden sm:block text-[11px] text-slate-500 font-medium">
+              Emploi du Temps Étudiant • Cours, Révisions, Stages & Repos
+            </p>
+          </div>
         </div>
 
-        <div>
-          <div className="flex items-center gap-1.5">
-            <h1 className="text-base font-extrabold text-slate-900 tracking-tight">
-              MatApp
-            </h1>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
-              Études Santé
-            </span>
-          </div>
-          <p className="hidden sm:block text-[11px] text-slate-500 font-medium">
-            Emploi du Temps Étudiant • Cours, Révisions, Stages & Repos
-          </p>
-        </div>
+        {/* Bouton contextuel : Revenir à la vue d'ensemble si un focus est actif */}
+        {activeFocusView !== 'all' && onResetView && (
+          <button
+            type="button"
+            onClick={onResetView}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer ml-1 animate-fadeIn"
+            title="Revenir à la page principale (Semaine + Tâches + Mois)"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">← Vue d'ensemble</span>
+            <span className="md:hidden">← Retour</span>
+          </button>
+        )}
       </div>
 
       {/* Actions de l'En-tête */}

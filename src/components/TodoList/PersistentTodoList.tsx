@@ -13,6 +13,10 @@ import {
   Clock,
   Check,
   CheckSquare,
+  Maximize2,
+  Minimize2,
+  Sparkles,
+  Filter,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -23,6 +27,8 @@ interface PersistentTodoListProps {
   userId?: string;
   onCloseMobileDrawer?: () => void;
   isCompactInSidebar?: boolean;
+  isExpandedFull?: boolean;
+  onToggleExpand?: () => void;
 }
 
 const QUICK_SUGGESTIONS = [
@@ -37,6 +43,8 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
   userId,
   onCloseMobileDrawer,
   isCompactInSidebar = false,
+  isExpandedFull = false,
+  onToggleExpand,
 }) => {
   const [newTitle, setNewTitle] = useState('');
   const [selectedColor, setSelectedColor] = useState(MEDICAL_COLORS[1].hex); // Révisions / Anki par défaut
@@ -44,6 +52,7 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
   const [showAlarmMenu, setShowAlarmMenu] = useState(false);
   const [alarmOption, setAlarmOption] = useState<'none' | '1h' | 'today_evening' | 'tomorrow_morning'>('none');
   const [isCompletedOpen, setIsCompletedOpen] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'active' | 'completed'>('all');
 
   // Live Query Dexie réactif instantané (0 ms) STRICTEMENT filtré par utilisateur
   const activeUserId = userId || getCurrentUserId();
@@ -112,40 +121,137 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
   return (
     <div
       className={clsx(
-        'flex flex-col select-none',
-        isCompactInSidebar
+        'flex flex-col select-none transition-all',
+        isExpandedFull
+          ? 'bg-white rounded-3xl p-5 md:p-8 border border-slate-200/90 shadow-md w-full max-w-4xl h-full flex flex-col overflow-hidden'
+          : isCompactInSidebar
           ? 'bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex-1 overflow-hidden min-h-[220px]'
           : 'h-full bg-white border-l border-slate-200 p-4'
       )}
     >
-      {/* En-tête sobre et naturel */}
-      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <CheckSquare className="w-3.5 h-3.5" />
+      {/* En-tête : Titre, Compteur & Bouton Agrandir/Réduire */}
+      <div className={clsx("flex items-center justify-between pb-2 mb-2 border-b border-slate-100", isExpandedFull && "pb-4 mb-4")}>
+        <div
+          onClick={!isExpandedFull ? onToggleExpand : undefined}
+          className={clsx(
+            "flex items-center gap-2.5",
+            !isExpandedFull && onToggleExpand && "cursor-pointer group"
+          )}
+          title={!isExpandedFull && onToggleExpand ? "Cliquer pour agrandir la To-Do List en grand format" : undefined}
+        >
+          <div className={clsx(
+            "rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs",
+            isExpandedFull ? "w-10 h-10" : "w-6 h-6"
+          )}>
+            <CheckSquare className={clsx(isExpandedFull ? "w-5 h-5 stroke-[2.2]" : "w-3.5 h-3.5 stroke-[2.2]")} />
           </div>
-          <h3 className="text-xs font-bold text-slate-800">
-            Tâches à faire
-          </h3>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-            {activeTasks.length}
-          </span>
+
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className={clsx(
+                "font-extrabold text-slate-800 tracking-tight",
+                isExpandedFull ? "text-lg md:text-xl" : "text-xs",
+                !isExpandedFull && onToggleExpand && "group-hover:text-indigo-600 transition-colors"
+              )}>
+                {isExpandedFull ? "To-Do List & Tâches Étudiant" : "Tâches à faire"}
+              </h3>
+              <span className={clsx(
+                "font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100",
+                isExpandedFull ? "text-xs px-2.5 py-0.5" : "text-[10px] px-2 py-0.5"
+              )}>
+                {activeTasks.length} {isExpandedFull ? 'en attente' : ''}
+              </span>
+            </div>
+            {isExpandedFull && (
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Organisation quotidienne des révisions, cartes Anki, fiches EDN et stages
+              </p>
+            )}
+          </div>
         </div>
 
-        {onCloseMobileDrawer && (
-          <button
-            type="button"
-            onClick={onCloseMobileDrawer}
-            className="md:hidden text-xs font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
-          >
-            Fermer
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Bouton Agrandir / Réduire */}
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className={clsx(
+                "flex items-center gap-1.5 rounded-xl transition-all cursor-pointer shadow-2xs",
+                isExpandedFull
+                  ? "px-3 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200"
+                  : "p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+              )}
+              title={isExpandedFull ? "Réduire à la vue normale (Vue d'ensemble)" : "Agrandir la To-Do List en grand format"}
+            >
+              {isExpandedFull ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Vue d'ensemble</span>
+                </>
+              ) : (
+                <Maximize2 className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
+
+          {onCloseMobileDrawer && (
+            <button
+              type="button"
+              onClick={onCloseMobileDrawer}
+              className="md:hidden text-xs font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              Fermer
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* Onglets de filtres en mode plein écran */}
+      {isExpandedFull && (
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setFilterMode('all')}
+            className={clsx(
+              "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+              filterMode === 'all'
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+            )}
+          >
+            Toutes les tâches ({allTasks?.length || 0})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('active')}
+            className={clsx(
+              "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+              filterMode === 'active'
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+            )}
+          >
+            En cours ({activeTasks.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('completed')}
+            className={clsx(
+              "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+              filterMode === 'completed'
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
+            )}
+          >
+            Terminées ({completedTasks.length})
+          </button>
+        </div>
+      )}
+
       {/* Formulaire d'ajout rapide */}
-      <form onSubmit={handleAddTask} className="mb-2.5 space-y-1.5">
-        <div className="flex items-center gap-1.5">
+      <form onSubmit={handleAddTask} className={clsx("mb-3 space-y-2", isExpandedFull && "mb-5 space-y-2.5")}>
+        <div className="flex items-center gap-2">
           {/* Sélecteur de couleur sobre (sans emojis) */}
           <div className="relative">
             <button
@@ -154,15 +260,18 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                 setShowColorPicker(!showColorPicker);
                 setShowAlarmMenu(false);
               }}
-              className="w-6 h-6 rounded-full border border-slate-200 flex items-center justify-center transition-transform active:scale-95 shadow-2xs"
+              className={clsx(
+                "rounded-full border border-slate-200 flex items-center justify-center transition-transform active:scale-95 shadow-2xs cursor-pointer",
+                isExpandedFull ? "w-9 h-9" : "w-6 h-6"
+              )}
               style={{ backgroundColor: selectedColor }}
-              title="Choisir la catégorie"
+              title="Choisir la couleur / catégorie"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-white shadow-xs" />
+              <span className={clsx("rounded-full bg-white shadow-xs", isExpandedFull ? "w-2.5 h-2.5" : "w-1.5 h-1.5")} />
             </button>
 
             {showColorPicker && (
-              <div className="absolute top-8 left-0 z-30 p-2 bg-white rounded-xl shadow-lg border border-slate-200 grid grid-cols-4 gap-1.5 w-40">
+              <div className="absolute top-10 left-0 z-30 p-2 bg-white rounded-xl shadow-lg border border-slate-200 grid grid-cols-4 gap-1.5 w-44">
                 {MEDICAL_COLORS.slice(0, 8).map((c) => (
                   <button
                     key={c.id}
@@ -171,11 +280,11 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                       setSelectedColor(c.hex);
                       setShowColorPicker(false);
                     }}
-                    className="w-7 h-7 rounded-lg transition-transform hover:scale-105 active:scale-95 flex items-center justify-center"
+                    className="w-8 h-8 rounded-lg transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                     style={{ backgroundColor: c.hex }}
                     title={c.name}
                   >
-                    {selectedColor === c.hex && <Check className="w-3.5 h-3.5 text-white" />}
+                    {selectedColor === c.hex && <Check className="w-4 h-4 text-white" />}
                   </button>
                 ))}
               </div>
@@ -187,8 +296,11 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
             type="text"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Nouvelle tâche (Anki, fiches, cours)..."
-            className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-normal text-slate-800"
+            placeholder={isExpandedFull ? "Ajouter une nouvelle tâche (ex: Revoir Anki Cardio, Fiche EDN Pneumo, Stage...)" : "Nouvelle tâche (Anki, fiches, cours)..."}
+            className={clsx(
+              "flex-1 bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-normal text-slate-800",
+              isExpandedFull ? "px-4 py-2.5 text-sm rounded-2xl" : "px-3 py-1.5 text-xs rounded-xl"
+            )}
           />
 
           {/* Bouton de rappel rapide */}
@@ -200,18 +312,19 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                 setShowColorPicker(false);
               }}
               className={clsx(
-                'p-1.5 rounded-xl border transition-all',
+                'border transition-all cursor-pointer',
+                isExpandedFull ? 'p-2.5 rounded-2xl' : 'p-1.5 rounded-xl',
                 alarmOption !== 'none'
                   ? 'bg-amber-50 text-amber-700 border-amber-200'
                   : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-slate-600'
               )}
               title="Ajouter un rappel"
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className={clsx(isExpandedFull ? "w-4 h-4" : "w-3.5 h-3.5")} />
             </button>
 
             {showAlarmMenu && (
-              <div className="absolute top-8 right-0 z-30 p-1.5 bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col gap-1 w-36 text-xs">
+              <div className="absolute top-10 right-0 z-30 p-1.5 bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col gap-1 w-40 text-xs">
                 <button
                   type="button"
                   onClick={() => {
@@ -272,16 +385,22 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
           <button
             type="submit"
             disabled={!newTitle.trim()}
-            className="p-1.5 rounded-xl bg-indigo-600 text-white disabled:opacity-30 hover:bg-indigo-700 active:scale-95 transition-all shadow-2xs shrink-0"
-            title="Ajouter"
+            className={clsx(
+              "bg-indigo-600 text-white disabled:opacity-30 hover:bg-indigo-700 active:scale-95 transition-all shadow-2xs shrink-0 cursor-pointer flex items-center gap-1.5 font-bold",
+              isExpandedFull ? "px-4 py-2.5 rounded-2xl text-sm" : "p-1.5 rounded-xl"
+            )}
+            title="Ajouter la tâche"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className={clsx(isExpandedFull ? "w-4 h-4" : "w-3.5 h-3.5")} />
+            {isExpandedFull && <span className="hidden sm:inline">Ajouter</span>}
           </button>
         </div>
 
         {/* Suggestions rapides sobres (sans emojis) */}
-        <div className="flex items-center gap-1 overflow-x-auto pt-0.5 scrollbar-none">
-          <span className="text-[10px] font-medium text-slate-400 shrink-0">Suggestions :</span>
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-0.5 scrollbar-none">
+          <span className={clsx("font-semibold text-slate-400 shrink-0", isExpandedFull ? "text-xs" : "text-[10px]")}>
+            Suggestions :
+          </span>
           {QUICK_SUGGESTIONS.map((sug) => (
             <button
               key={sug.label}
@@ -294,9 +413,12 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                   is_completed: false,
                 });
               }}
-              className="shrink-0 px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900 text-[10px] font-medium transition-all active:scale-95 flex items-center gap-1.5"
+              className={clsx(
+                "shrink-0 rounded-full bg-slate-100 hover:bg-slate-200/80 text-slate-700 hover:text-slate-900 font-medium transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer",
+                isExpandedFull ? "px-3 py-1 text-xs" : "px-2 py-0.5 text-[10px]"
+              )}
             >
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: sug.color }} />
+              <span className={clsx("rounded-full shrink-0", isExpandedFull ? "w-2 h-2" : "w-1.5 h-1.5")} style={{ backgroundColor: sug.color }} />
               <span>{sug.label}</span>
             </button>
           ))}
@@ -304,96 +426,139 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
       </form>
 
       {/* Liste des tâches */}
-      <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 scrollbar-thin scrollbar-thumb-slate-200">
-        {activeTasks.length === 0 && (
-          <div className="py-6 px-3 text-center">
-            <p className="text-xs font-semibold text-slate-600">Aucune tâche en attente</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">
-              Toutes vos révisions et activités sont à jour.
+      <div className={clsx(
+        "flex-1 overflow-y-auto pr-0.5 scrollbar-thin scrollbar-thumb-slate-200",
+        isExpandedFull ? "space-y-2.5" : "space-y-1.5"
+      )}>
+        {/* État vide si aucune tâche active */}
+        {filterMode !== 'completed' && activeTasks.length === 0 && (
+          <div className={clsx("text-center", isExpandedFull ? "py-12 px-4" : "py-6 px-3")}>
+            <div className={clsx(
+              "rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center mb-2",
+              isExpandedFull ? "w-12 h-12" : "w-8 h-8"
+            )}>
+              <CheckSquare className={clsx(isExpandedFull ? "w-6 h-6 stroke-[2]" : "w-4 h-4")} />
+            </div>
+            <p className={clsx("font-bold text-slate-700", isExpandedFull ? "text-base" : "text-xs")}>
+              Aucune tâche en attente
+            </p>
+            <p className={clsx("text-slate-400 mt-0.5", isExpandedFull ? "text-xs max-w-sm mx-auto" : "text-[10px]")}>
+              Toutes vos révisions et activités médicales sont à jour !
             </p>
           </div>
         )}
 
-        <AnimatePresence initial={false}>
-          {activeTasks.map((task) => {
-            const theme = getColorTheme(task.color);
+        {/* Liste des tâches actives (affichée si mode 'all' ou 'active') */}
+        {filterMode !== 'completed' && (
+          <AnimatePresence initial={false}>
+            {activeTasks.map((task) => {
+              const theme = getColorTheme(task.color);
 
-            return (
-              <motion.div
-                key={task.id}
-                layout
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                drag="x"
-                dragConstraints={{ left: -40, right: 40 }}
-                dragElastic={0.15}
-                onDragEnd={(_, info) => {
-                  if (info.offset.x > 35) {
-                    handleToggle(task.id);
-                  } else if (info.offset.x < -35) {
-                    deleteLocalTask(task.id);
-                  }
-                }}
-                transition={{ duration: 0.15 }}
-                onClick={() => handleToggle(task.id)}
-                className="group relative flex items-start gap-2 p-2 rounded-xl bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-2xs transition-all cursor-pointer touch-pan-y active:scale-[0.99]"
-                style={{
-                  borderLeftWidth: '3px',
-                  borderLeftColor: theme.borderAccent || theme.hex,
-                }}
-              >
-                {/* Case à cocher circulaire */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggle(task.id);
+              return (
+                <motion.div
+                  key={task.id}
+                  layout
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  drag="x"
+                  dragConstraints={{ left: -40, right: 40 }}
+                  dragElastic={0.15}
+                  onDragEnd={(_, info) => {
+                    if (info.offset.x > 35) {
+                      handleToggle(task.id);
+                    } else if (info.offset.x < -35) {
+                      deleteLocalTask(task.id);
+                    }
                   }}
-                  className="mt-0.5 text-slate-300 group-hover:text-emerald-600 transition-colors shrink-0"
-                >
-                  <Circle className="w-4 h-4 stroke-[1.8]" />
-                </button>
-
-                {/* Corps de la tâche */}
-                <div className="flex-1 min-w-0 pr-4 select-none">
-                  <p className="text-xs font-medium text-slate-800 leading-snug break-words">
-                    {task.title}
-                  </p>
-
-                  {task.alarm_time && (
-                    <div className="flex items-center gap-1 text-[10px] text-amber-700 font-medium mt-0.5">
-                      <Clock className="w-2.5 h-2.5 text-amber-600" />
-                      <span>{format(parseISO(task.alarm_time), 'HH:mm dd/MM', { locale: fr })}</span>
-                    </div>
+                  transition={{ duration: 0.15 }}
+                  onClick={() => handleToggle(task.id)}
+                  className={clsx(
+                    "group relative flex items-start bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-xs transition-all cursor-pointer touch-pan-y active:scale-[0.99]",
+                    isExpandedFull ? "p-3.5 md:p-4 rounded-2xl gap-3.5" : "p-2 rounded-xl gap-2"
                   )}
-                </div>
-
-                {/* Bouton de suppression */}
-                <button
-                  type="button"
-                  onClick={(e) => handleDelete(task.id, e)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 rounded transition-opacity absolute top-1 right-1"
-                  title="Supprimer"
+                  style={{
+                    borderLeftWidth: isExpandedFull ? '4px' : '3px',
+                    borderLeftColor: theme.borderAccent || theme.hex,
+                  }}
                 >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+                  {/* Case à cocher circulaire */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggle(task.id);
+                    }}
+                    className={clsx(
+                      "mt-0.5 text-slate-300 group-hover:text-emerald-600 transition-colors shrink-0",
+                      isExpandedFull ? "p-0.5" : ""
+                    )}
+                  >
+                    <Circle className={clsx(isExpandedFull ? "w-5 h-5 stroke-[2]" : "w-4 h-4 stroke-[1.8]")} />
+                  </button>
+
+                  {/* Corps de la tâche */}
+                  <div className="flex-1 min-w-0 pr-6 select-none">
+                    <p className={clsx(
+                      "leading-snug break-words text-slate-800",
+                      isExpandedFull ? "text-sm md:text-base font-semibold" : "text-xs font-medium"
+                    )}>
+                      {task.title}
+                    </p>
+
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {/* Badge catégorie en mode grand */}
+                      {isExpandedFull && theme.name && (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: theme.hex }} />
+                          {theme.name}
+                        </span>
+                      )}
+
+                      {task.alarm_time && (
+                        <div className={clsx(
+                          "flex items-center gap-1 text-amber-700 font-semibold",
+                          isExpandedFull ? "text-xs bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/70" : "text-[10px]"
+                        )}>
+                          <Clock className={clsx(isExpandedFull ? "w-3 h-3 text-amber-600" : "w-2.5 h-2.5 text-amber-600")} />
+                          <span>{format(parseISO(task.alarm_time), 'HH:mm dd/MM', { locale: fr })}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Bouton de suppression */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleDelete(task.id, e)}
+                    className={clsx(
+                      "transition-all absolute top-2 right-2 text-slate-300 hover:text-red-500 rounded-lg cursor-pointer",
+                      isExpandedFull ? "opacity-40 group-hover:opacity-100 p-1.5 hover:bg-red-50" : "opacity-0 group-hover:opacity-100 p-1"
+                    )}
+                    title="Supprimer la tâche"
+                  >
+                    <Trash2 className={clsx(isExpandedFull ? "w-4 h-4" : "w-3 h-3")} />
+                  </button>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        )}
 
         {/* Section Accordéon "Terminées" */}
         {completedTasks.length > 0 && (
-          <div className="pt-2 border-t border-slate-100 mt-2">
+          <div className={clsx("border-t border-slate-100", isExpandedFull ? "pt-4 mt-4" : "pt-2 mt-2")}>
             <button
               type="button"
               onClick={() => setIsCompletedOpen(!isCompletedOpen)}
-              className="w-full flex items-center justify-between text-[11px] font-semibold text-slate-400 hover:text-slate-600 py-1"
+              className={clsx(
+                "w-full flex items-center justify-between text-slate-400 hover:text-slate-600 py-1 cursor-pointer font-bold",
+                isExpandedFull ? "text-xs md:text-sm" : "text-[11px]"
+              )}
             >
-              <span className="flex items-center gap-1">
-                {isCompletedOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                Terminées ({completedTasks.length})
+              <span className="flex items-center gap-1.5">
+                {isCompletedOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                Tâches terminées ({completedTasks.length})
               </span>
 
               {isCompletedOpen && (
@@ -403,37 +568,43 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                     e.stopPropagation();
                     handleClearCompleted();
                   }}
-                  className="text-[10px] text-slate-400 hover:text-red-500 font-medium transition-colors"
+                  className="text-xs text-slate-400 hover:text-red-500 font-semibold px-2 py-0.5 rounded hover:bg-red-50 transition-colors"
                 >
-                  Effacer
+                  Tout effacer
                 </button>
               )}
             </button>
 
-            {isCompletedOpen && (
+            {(isCompletedOpen || filterMode === 'completed') && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="space-y-1 pt-1"
+                className={clsx("space-y-1.5 pt-2", isExpandedFull && "space-y-2")}
               >
                 {completedTasks.map((task) => (
                   <div
                     key={task.id}
                     onClick={() => handleToggle(task.id)}
-                    className="group flex items-center gap-2 p-1.5 rounded-lg bg-slate-50/60 border border-slate-100 opacity-60 hover:opacity-90 cursor-pointer transition-opacity"
+                    className={clsx(
+                      "group flex items-center gap-2 rounded-xl bg-slate-50/60 border border-slate-100 opacity-60 hover:opacity-90 cursor-pointer transition-opacity",
+                      isExpandedFull ? "p-3" : "p-1.5"
+                    )}
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span className="flex-1 text-[11px] text-slate-500 line-through truncate">
+                    <CheckCircle2 className={clsx(isExpandedFull ? "w-4 h-4" : "w-3.5 h-3.5", "text-emerald-600 shrink-0")} />
+                    <span className={clsx(
+                      "flex-1 text-slate-500 line-through truncate",
+                      isExpandedFull ? "text-sm" : "text-[11px]"
+                    )}>
                       {task.title}
                     </span>
                     <button
                       type="button"
                       onClick={(e) => handleDelete(task.id, e)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 p-0.5 transition-opacity"
+                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-all cursor-pointer"
                       title="Supprimer"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className={clsx(isExpandedFull ? "w-4 h-4" : "w-3 h-3")} />
                     </button>
                   </div>
                 ))}

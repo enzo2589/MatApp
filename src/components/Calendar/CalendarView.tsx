@@ -24,7 +24,9 @@ import {
   Plus,
   CalendarCheck,
   Calendar as CalendarIcon,
-  GraduationCap
+  GraduationCap,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDrag } from '@use-gesture/react';
@@ -37,6 +39,9 @@ interface CalendarViewProps {
   onOpenTodoList?: () => void;
   onOpenImportModal?: () => void;
   pendingTasksCount?: number;
+  onToggleExpand?: () => void;
+  isExpandedFull?: boolean;
+  forcedViewMode?: CalendarViewMode;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -46,6 +51,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onOpenTodoList,
   onOpenImportModal,
   pendingTasksCount = 0,
+  onToggleExpand,
+  isExpandedFull = false,
+  forcedViewMode,
 }) => {
   const [internalDate, setInternalDate] = useState<Date>(() => {
     try {
@@ -71,8 +79,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     }
   };
 
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>(forcedViewMode || 'week');
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
+
+  React.useEffect(() => {
+    if (forcedViewMode) {
+      setViewMode(forcedViewMode);
+    }
+  }, [forcedViewMode]);
 
   // Modal d'événement rapide
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -259,6 +273,33 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               Mois
             </button>
           </div>
+
+          {/* Bouton Agrandir / Réduire */}
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className={clsx(
+                'flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-2xs',
+                isExpandedFull
+                  ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+              )}
+              title={isExpandedFull ? "Réduire à la vue normale" : "Agrandir l'emploi du temps en grand format"}
+            >
+              {isExpandedFull ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Vue d'ensemble</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Plein écran</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* Bouton To-Do mobile */}
           {onOpenTodoList && (
