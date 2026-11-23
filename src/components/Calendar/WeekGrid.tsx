@@ -25,7 +25,8 @@ import {
   MoveVertical,
   Copy,
   Check,
-  User
+  User,
+  Pencil
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -86,13 +87,29 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   // Inspecteur rapide Apple pour événement cliqué
   const [quickInspectEvent, setQuickInspectEvent] = useState<EventItem | null>(null);
 
-  // Référence pour mémoriser le premier tap pour la détection du double-tap sur mobile/iPad
-  const lastTouchTapRef = useRef<{
+  // Référence pour mémoriser le premier tap de stylet (Apple Pencil) pour la détection du double-clic
+  const lastPenTapRef = useRef<{
     time: number;
     x: number;
     y: number;
     dayKey: string;
     slotMinutes: number;
+  } | null>(null);
+
+  // Indice visuel éphémère lors du premier tap au stylet ("Double-clic pour créer")
+  const [penHint, setPenHint] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const penHintTimerRef = useRef<number | null>(null);
+
+  // Timers pour appui long intentionnel au doigt sur créneau vide (pour les élèves sans stylet)
+  const slotLongPressTimerRef = useRef<number | null>(null);
+  const slotLongPressStartRef = useRef<{
+    x: number;
+    y: number;
+    day: Date;
+    snappedMinutes: number;
   } | null>(null);
 
   // État de création tactile par glissement (Touch-and-Drag)
@@ -172,11 +189,17 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   } | null>(null);
   const didDragRef = useRef(false);
 
-  // Nettoyage du timer d'appui long au démontage
+  // Nettoyage des timers au démontage
   useEffect(() => {
     return () => {
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
+      }
+      if (slotLongPressTimerRef.current) {
+        clearTimeout(slotLongPressTimerRef.current);
+      }
+      if (penHintTimerRef.current) {
+        clearTimeout(penHintTimerRef.current);
       }
     };
   }, []);
@@ -414,7 +437,10 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   }, [days, events, hourHeight, resizingEvent]);
 
   // --------------------------------------------------------------------------
-  // GESTION TACTILE : DOUBLE-TAP PUIS GLISSER POUR CRÉER, SCROLL VERTICAL FLUIDE
+  // GESTION DU CLIC / TACTILE SUR CRÉNEAUX VIDES :
+  // - AU DOIGT (touch) : DÉFILEMENT (scroll) TOTALEMENT PRIORITAIRE sans création intempestive.
+  // - AU STYLET (pen) : DOUBLE-CLIC AU STYLET pour créer une activité avec précision.
+  // - À LA SOURIS (mouse) : Clic ou glisser pour créer un créneau.
   // --------------------------------------------------------------------------
   const handleSlotPointerDown = (e: React.PointerEvent<HTMLDivElement>, day: Date) => {
     // Si clic sur carte d'événement ou poignée, laisser faire l'événement
@@ -447,45 +473,125 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       return;
     }
 
-    // Cas 2 : Tactile (Doigt / Apple Pencil) :
-    // On vérifie s'il s'agit du DEUXIÈME tap d'un double-tap
-    const lastTap = lastTouchTapRef.current;
-    const isDoubleTap =
-      lastTap &&
-      now - lastTap.time < 420 &&
-      Math.abs(e.clientX - lastTap.x) < 40 &&
-      Math.abs(e.clientY - lastTap.y) < 40 &&
-      lastTap.dayKey === dayKey;
+    // Cas 2 : Stylet / Apple Pencil (iPad) :
+    // CRÉATION PAR DOUBLE-CLIC AU STYLET (selon la demande de l'utilisateur)
+    if (e.pointerType === 'pen') {
+      const lastPenTap = lastPenTapRef.current;
+      const isPenDoubleTap =
+        lastPenTap &&
+        now - lastPenTap.time < 500 &&
+        Math.abs(e.clientX - lastPenTap.x) < 50 &&
+        Math.abs(e.clientY - lastPenTap.y) < 50 &&
+        lastPenTap.dayKey === dayKey;
 
-    if (isDoubleTap) {
-      // DOUBLE-TAP : l'étudiant veut créer un créneau en descendant le doigt !
-      lastTouchTapRef.current = null;
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      } catch {}
+      if (penHintTimerRef.current) {
+        clearTimeout(penHintTimerRef.current);
+        penHintTimerRef.current = null;
+      }
 
-      const startMin = lastTap.slotMinutes ?? snappedMinutes;
-      setDragCreation({
-        day,
-        startMinutes: startMin,
-        currentMinutes: startMin + 60,
-        startY: e.clientY,
-        isDragging: true,
-      });
-    } else {
-      // TOUCHER SIMPLE : On NE capture PAS le pointeur et on NE crée PAS de dragCreation.
-      // Cela permet au navigateur de faire défiler naturellement l'emploi du temps (monter / descendre).
-      lastTouchTapRef.current = {
-        time: now,
+      if (isPenDoubleTap) {
+        // DOUBLE-CLIC STYLET DÉTECTÉ : L'étudiant crée un événement avec son Apple Pencil !
+        lastPenTapRef.current = null;
+        setPenHint(null);
+
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          try {
+            navigator.vibrate(35);
+          } catch {}
+        }
+
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {}
+
+        const startMin = lastPenTap.slotMinutes ?? snappedMinutes;
+        setDragCreation({
+          day,
+          startMinutes: startMin,
+          currentMinutes: Math.min(1440, startMin + 60),
+          startY: e.clientY,
+          isDragging: true,
+        });
+      } else {
+        // PREMIER TAP AU STYLET : Mémorisation et affichage d'un indice discret
+        lastPenTapRef.current = {
+          time: now,
+          x: e.clientX,
+          y: e.clientY,
+          dayKey,
+          slotMinutes: snappedMinutes,
+        };
+        setPenHint({
+          x: e.clientX,
+          y: e.clientY,
+        });
+        penHintTimerRef.current = window.setTimeout(() => {
+          setPenHint(null);
+          lastPenTapRef.current = null;
+        }, 500);
+      }
+      return;
+    }
+
+    // Cas 3 : Doigt sur écran tactile (iPad & Mobile) :
+    // DÉFILEMENT PUR (Monter / Descendre sans jamais créer d'événement parasite).
+    // On ne capture JAMAIS le pointeur, on ne crée pas de créneau au toucher simple ou double-tap.
+    if (e.pointerType === 'touch') {
+      if (penHint) setPenHint(null);
+
+      // Sécurité : Appui long immobile de 600ms pour créer un événement au doigt SI l'étudiant n'a pas de stylet.
+      // Dès que le doigt commence à monter ou descendre pour scroller (> 10px), ce timer est immédiatement tué.
+      if (slotLongPressTimerRef.current) {
+        clearTimeout(slotLongPressTimerRef.current);
+        slotLongPressTimerRef.current = null;
+      }
+
+      slotLongPressStartRef.current = {
         x: e.clientX,
         y: e.clientY,
-        dayKey,
-        slotMinutes: snappedMinutes,
+        day,
+        snappedMinutes,
       };
+
+      slotLongPressTimerRef.current = window.setTimeout(() => {
+        if (!slotLongPressStartRef.current) return;
+        const targetDay = slotLongPressStartRef.current.day;
+        const startMin = slotLongPressStartRef.current.snappedMinutes;
+        slotLongPressStartRef.current = null;
+        slotLongPressTimerRef.current = null;
+
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          try {
+            navigator.vibrate(35);
+          } catch {}
+        }
+
+        const startHours = Math.floor(startMin / 60);
+        const startMins = startMin % 60;
+        const startTime = setMinutes(setHours(targetDay, startHours), startMins);
+        const endTime = addMinutes(startTime, 60);
+        onSelectSlot(startTime, endTime);
+      }, 600);
+
+      return;
     }
   };
 
   const handleSlotPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Si l'utilisateur utilise son doigt pour monter / descendre (scroll vertical) :
+    // Le moindre déplacement annule immédiatement l'appui long éventuel
+    if (slotLongPressTimerRef.current && slotLongPressStartRef.current) {
+      const dist = Math.hypot(
+        e.clientX - slotLongPressStartRef.current.x,
+        e.clientY - slotLongPressStartRef.current.y
+      );
+      if (dist > 10) {
+        clearTimeout(slotLongPressTimerRef.current);
+        slotLongPressTimerRef.current = null;
+        slotLongPressStartRef.current = null;
+      }
+    }
+
     // Si pas de création active (c-à-d simple défilement vertical au doigt), on laisse défiler
     if (!dragCreation) return;
 
@@ -507,7 +613,13 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   };
 
   const handleSlotPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Si création active (double-tap glissé tactile ou clic-glissé souris)
+    if (slotLongPressTimerRef.current) {
+      clearTimeout(slotLongPressTimerRef.current);
+      slotLongPressTimerRef.current = null;
+    }
+    slotLongPressStartRef.current = null;
+
+    // Si création active (double-tap glissé au stylet ou clic-glissé souris)
     if (dragCreation) {
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -550,6 +662,16 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
         onSelectSlot(startTime, endTime);
       }
     }
+  };
+
+  const handleSlotPointerCancel = () => {
+    if (slotLongPressTimerRef.current) {
+      clearTimeout(slotLongPressTimerRef.current);
+      slotLongPressTimerRef.current = null;
+    }
+    slotLongPressStartRef.current = null;
+    setDragCreation(null);
+    setPenHint(null);
   };
 
   // --------------------------------------------------------------------------
@@ -964,6 +1086,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                 onPointerDown={(e) => handleSlotPointerDown(e, day)}
                 onPointerMove={handleSlotPointerMove}
                 onPointerUp={handleSlotPointerUp}
+                onPointerCancel={handleSlotPointerCancel}
                 className={clsx(
                   'relative h-full transition-colors cursor-crosshair group/cell touch-pan-y',
                   today ? 'bg-indigo-50/15' : 'hover:bg-slate-50/40'
@@ -1416,6 +1539,23 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
               {((movingEvent.targetStartMinutes + movingEvent.durationMinutes) % 60).toString().padStart(2, '0')}
             </span>
           </div>
+        </div>
+      )}
+
+      {/* INDICATION VISUELLE DISCRÈTE POUR LE DOUBLE-CLIC STYLET */}
+      {penHint && (
+        <div
+          style={{
+            position: 'fixed',
+            left: `${penHint.x + 10}px`,
+            top: `${penHint.y - 36}px`,
+            pointerEvents: 'none',
+            zIndex: 9999,
+          }}
+          className="bg-indigo-950/90 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg border border-indigo-400/40 backdrop-blur-sm flex items-center gap-1.5 animate-bounce select-none"
+        >
+          <Pencil className="w-3 h-3 text-indigo-300" />
+          <span>Double-clic stylet pour créer</span>
         </div>
       )}
     </div>
