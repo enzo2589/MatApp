@@ -1191,6 +1191,18 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                   const subjectLabel = descParts[0] || '';
                   const professorOrRoom = descParts.slice(1).join(' • ');
 
+                  const isNarrow = totalColumns >= 3 || widthPercent < 45;
+                  const isMedium = totalColumns === 2 || (widthPercent >= 45 && widthPercent < 75);
+
+                  // Calcul dynamique du nombre de lignes de titre autorisées selon la hauteur disponible
+                  const maxTitleLines =
+                    height >= 170 ? 8 :
+                    height >= 130 ? 6 :
+                    height >= 95 ? 5 :
+                    height >= 70 ? 4 :
+                    height >= 50 ? 3 :
+                    height >= 35 ? 2 : 1;
+
                   return (
                     <div
                       key={event.id}
@@ -1216,7 +1228,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                         top: `${top}px`,
                         height: `${height}px`,
                         left: `${leftPercent}%`,
-                        width: `${widthPercent - 1.5}%`,
+                        width: `${widthPercent - (isNarrow ? 0.8 : 1.5)}%`,
                         backgroundColor: theme.bgPastel,
                         borderLeftColor: theme.borderAccent,
                         WebkitTouchCallout: 'none',
@@ -1224,7 +1236,12 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                       }}
                       data-event-id={event.id}
                       className={clsx(
-                        'event-card absolute z-10 rounded-2xl p-2.5 sm:p-3 shadow-xs border-l-[5px] border-t border-r border-b border-black/5 transition-all duration-150',
+                        'event-card absolute z-10 shadow-xs border-t border-r border-b border-black/5 transition-all duration-150',
+                        isNarrow
+                          ? 'rounded-xl px-1.5 py-1.5 border-l-[3.5px]'
+                          : isMedium
+                          ? 'rounded-xl px-2 py-2 sm:px-2.5 sm:py-2.5 border-l-4'
+                          : 'rounded-2xl p-2.5 sm:p-3 border-l-[5px]',
                         'hover:shadow-lg hover:scale-[1.01] hover:z-20 cursor-pointer overflow-hidden flex flex-col justify-between select-none active:scale-[0.98]',
                         isInspected && 'ring-2 ring-indigo-500 shadow-apple-lg z-30',
                         isBeingMoved && 'opacity-25 border-dashed ring-2 ring-indigo-500/50 scale-[0.97]',
@@ -1236,9 +1253,12 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                       <div className="min-w-0 pointer-events-none space-y-1">
                         {/* En-tête : Badge matière & Alarme */}
                         <div className="flex items-center justify-between gap-1 flex-wrap">
-                          {subjectLabel && height >= 50 && (
+                          {subjectLabel && (isNarrow ? height >= 140 : height >= 50) && (
                             <span
-                              className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md truncate max-w-[170px]"
+                              className={clsx(
+                                'font-black uppercase tracking-wider rounded truncate',
+                                isNarrow ? 'text-[8.5px] px-1 py-0.2 max-w-full' : 'text-[10px] px-2 py-0.5 max-w-[170px]'
+                              )}
                               style={{
                                 backgroundColor: theme.badgeBg,
                                 color: theme.textColor,
@@ -1250,36 +1270,62 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
 
                           <div className="flex items-center gap-1 ml-auto">
                             {event.alarms && event.alarms.length > 0 && (
-                              <Bell className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                              <Bell className={clsx(isNarrow ? 'w-3 h-3' : 'w-3.5 h-3.5', 'text-red-500 shrink-0')} />
                             )}
                           </div>
                         </div>
 
                         {/* Titre principal grand et ultra-lisible */}
                         <h4
-                          className="text-xs sm:text-sm font-black tracking-tight leading-snug line-clamp-2 sm:line-clamp-3 text-slate-900"
-                          style={{ color: theme.textColor }}
+                          className={clsx(
+                            'font-black tracking-tight text-slate-900',
+                            isNarrow
+                              ? 'text-[10.5px] sm:text-[11px] leading-[1.18]'
+                              : isMedium
+                              ? 'text-xs sm:text-[13px] leading-snug'
+                              : 'text-xs sm:text-sm leading-snug'
+                          )}
+                          style={{
+                            color: theme.textColor,
+                            display: '-webkit-box',
+                            WebkitBoxOrient: 'vertical',
+                            WebkitLineClamp: maxTitleLines,
+                            overflow: 'hidden',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere',
+                          }}
                         >
                           {event.title}
                         </h4>
 
                         {/* Horaire et durée */}
-                        {height >= 40 && (
-                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-white/70 px-2 py-0.5 rounded-md w-fit shadow-2xs">
-                            <Clock className="w-3 h-3 text-slate-500 shrink-0" />
-                            <span>
-                              {format(parseISO(event.start_time), 'HH:mm')} - {format(parseISO(event.end_time), 'HH:mm')}
-                            </span>
-                            <span className="opacity-70 text-[10px] font-semibold">
-                              ({durationMins >= 60 ? `${Math.floor(durationMins / 60)}h${durationMins % 60 ? durationMins % 60 : ''}` : `${durationMins}m`})
-                            </span>
-                          </div>
+                        {height >= 38 && (
+                          isNarrow ? (
+                            <div className="text-[9.5px] font-black text-slate-800 bg-white/80 px-1 py-0.5 rounded leading-none w-fit shadow-2xs mt-1">
+                              <span>{format(parseISO(event.start_time), 'HH:mm')}</span>
+                              {height >= 55 && (
+                                <span className="opacity-70 text-[8.5px] font-bold block mt-0.5">
+                                  {format(parseISO(event.end_time), 'HH:mm')}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-white/70 px-2 py-0.5 rounded-md w-fit shadow-2xs mt-1">
+                              <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                              <span>
+                                {format(parseISO(event.start_time), 'HH:mm')} - {format(parseISO(event.end_time), 'HH:mm')}
+                              </span>
+                              <span className="opacity-70 text-[10px] font-semibold">
+                                ({durationMins >= 60 ? `${Math.floor(durationMins / 60)}h${durationMins % 60 ? durationMins % 60 : ''}` : `${durationMins}m`})
+                              </span>
+                            </div>
+                          )
                         )}
 
                         {/* Enseignant / Salle */}
-                        {height >= 85 && professorOrRoom && (
-                          <p className="text-[11px] font-semibold text-slate-600 truncate flex items-center gap-1 mt-1">
-                            <User className="w-3 h-3 text-slate-400 shrink-0" />
+                        {(isNarrow ? height >= 120 : height >= 85) && professorOrRoom && (
+                          <p className={clsx('font-semibold text-slate-600 truncate flex items-center gap-1 mt-1', isNarrow ? 'text-[9.5px]' : 'text-[11px]')}>
+                            <User className={clsx(isNarrow ? 'w-2.5 h-2.5' : 'w-3 h-3', 'text-slate-400 shrink-0')} />
                             <span className="truncate">{professorOrRoom}</span>
                           </p>
                         )}
@@ -1293,7 +1339,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                         className="touch-none w-full h-3.5 -mb-1 flex items-center justify-center cursor-ns-resize hover:bg-black/10 active:bg-black/20 rounded-b transition-colors group/resize"
                         title="Glissez avec le doigt ou Apple Pencil pour ajuster la durée"
                       >
-                        <div className="w-8 h-1 rounded-full bg-slate-400/50 group-hover/resize:bg-indigo-600 group-hover/resize:w-12 transition-all" />
+                        <div className={clsx('h-1 rounded-full bg-slate-400/50 group-hover/resize:bg-indigo-600 transition-all', isNarrow ? 'w-5' : 'w-8 group-hover/resize:w-12')} />
                       </div>
                     </div>
                   );
