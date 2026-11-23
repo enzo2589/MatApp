@@ -84,6 +84,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>(forcedViewMode || 'week');
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
+  const [isMovingCard, setIsMovingCard] = useState(false);
 
   React.useEffect(() => {
     if (forcedViewMode) {
@@ -141,13 +142,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     handleUpdateDate(today);
   };
 
-  // Support des Gestes Tactiles de Swipe (use-gesture) - Calibré pour éviter les changements involontaires de semaine
+  // Support des Gestes Tactiles de Swipe (use-gesture) - STRICTEMENT neutralisé si une carte est manipulée
   const bindGesture = useDrag(
-    ({ movement: [mx, my], velocity: [vx], cancel }) => {
-      // Le geste doit être très nettement horizontal (au moins 2.2x plus horizontal que vertical)
-      const isClearlyHorizontal = Math.abs(mx) > Math.abs(my) * 2.2;
-      // Seuil franc pour éviter les déclenchements trop sensibles (au moins 130px ou geste vif avec > 75px)
-      const isDeliberate = Math.abs(mx) > 130 || (Math.abs(vx) > 0.8 && Math.abs(mx) > 75);
+    ({ movement: [mx, my], velocity: [vx], cancel, event }) => {
+      // 1. Si une carte d'activité est en cours de déplacement tactile (appui long iPad), NE JAMAIS changer de semaine
+      if (isMovingCard || (typeof document !== 'undefined' && document.body.classList.contains('is-moving-calendar-event'))) {
+        cancel();
+        return;
+      }
+
+      // 2. Si le geste a débuté sur une carte de cours ou un bouton, bloquer le swipe
+      const target = (event as any)?.target as HTMLElement | null;
+      if (
+        target?.closest('.event-card') ||
+        target?.closest('[data-event-id]') ||
+        target?.closest('.event-resize-handle') ||
+        target?.closest('button')
+      ) {
+        cancel();
+        return;
+      }
+
+      // Le geste doit être très nettement horizontal (au moins 2.5x plus horizontal que vertical)
+      const isClearlyHorizontal = Math.abs(mx) > Math.abs(my) * 2.5;
+      // Seuil franc pour éviter les déclenchements trop sensibles (au moins 140px)
+      const isDeliberate = Math.abs(mx) > 140 || (Math.abs(vx) > 0.85 && Math.abs(mx) > 85);
 
       if (isClearlyHorizontal && isDeliberate) {
         if (mx < 0) {
@@ -162,7 +181,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       axis: 'x',
       filterTaps: true,
       rubberband: true,
-      threshold: 25,
+      threshold: 30,
     }
   );
 
@@ -399,6 +418,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 events={events || []}
                 onSelectSlot={handleSelectSlot}
                 onSelectEvent={handleSelectEvent}
+                onMovingEventChange={setIsMovingCard}
               />
             )}
           </motion.div>

@@ -36,6 +36,7 @@ interface WeekGridProps {
   events: EventItem[];
   onSelectSlot: (startTime: Date, endTime: Date) => void;
   onSelectEvent: (event: EventItem) => void;
+  onMovingEventChange?: (isMoving: boolean) => void;
 }
 
 const TOTAL_HOURS = 24;
@@ -60,6 +61,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   events,
   onSelectSlot,
   onSelectEvent,
+  onMovingEventChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const now = new Date();
@@ -129,6 +131,32 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   const [movingEvent, setMovingEvent] = useState<MovingEventState | null>(null);
   const movingEventRef = useRef<MovingEventState | null>(null);
   movingEventRef.current = movingEvent;
+
+  const [pressingEventId, setIsPressingEventId] = useState<string | null>(null);
+
+  // Synchronisation du statut de déplacement avec le conteneur parent (neutralise tout swipe de page)
+  useEffect(() => {
+    if (movingEvent) {
+      onMovingEventChange?.(true);
+      if (typeof document !== 'undefined') {
+        document.body.classList.add('is-moving-calendar-event');
+        document.body.style.userSelect = 'none';
+      }
+    } else {
+      onMovingEventChange?.(false);
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('is-moving-calendar-event');
+        document.body.style.userSelect = '';
+      }
+    }
+    return () => {
+      onMovingEventChange?.(false);
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('is-moving-calendar-event');
+        document.body.style.userSelect = '';
+      }
+    };
+  }, [movingEvent, onMovingEventChange]);
 
   const longPressTimerRef = useRef<number | null>(null);
   const pressStartRef = useRef<{
@@ -557,18 +585,20 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       targetEl: cardEl,
     };
     didDragRef.current = false;
+    setIsPressingEventId(event.id);
+    onMovingEventChange?.(true);
 
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
     }
 
-    // Déclenchement de l'appui long après 350ms
+    // Déclenchement tactile rapide et réactif de l'appui long (280ms)
     longPressTimerRef.current = window.setTimeout(() => {
       if (!pressStartRef.current) return;
 
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         try {
-          navigator.vibrate(40);
+          navigator.vibrate(35);
         } catch {}
       }
 
@@ -577,6 +607,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       } catch {}
 
       setQuickInspectEvent(null);
+      setIsPressingEventId(null);
 
       const initialSlot = calculateTargetSlot(e.clientX, e.clientY, durationMinutes, grabOffsetY);
 
@@ -593,16 +624,20 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       });
 
       didDragRef.current = true;
-    }, 350);
+    }, 280);
   };
 
   const handleEventPointerMove = (e: React.PointerEvent) => {
     if (longPressTimerRef.current && pressStartRef.current && !movingEvent) {
       const dist = Math.hypot(e.clientX - pressStartRef.current.x, e.clientY - pressStartRef.current.y);
-      if (dist > 8) {
+      // Marge de micro-mouvements tolérée sur écran tactile iPad (24px)
+      const maxSlop = e.pointerType === 'touch' ? 24 : 12;
+      if (dist > maxSlop) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
         pressStartRef.current = null;
+        setIsPressingEventId(null);
+        onMovingEventChange?.(false);
       }
       return;
     }
@@ -637,8 +672,11 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       longPressTimerRef.current = null;
     }
 
+    setIsPressingEventId(null);
+
     if (!movingEvent) {
       pressStartRef.current = null;
+      onMovingEventChange?.(false);
       return;
     }
 
@@ -650,6 +688,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       movingEvent;
     setMovingEvent(null);
     pressStartRef.current = null;
+    onMovingEventChange?.(false);
 
     const originalDayKey = format(originalDay, 'yyyy-MM-dd');
     const targetDayKey = format(targetDay, 'yyyy-MM-dd');
@@ -689,8 +728,10 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {}
     setMovingEvent(null);
+    setIsPressingEventId(null);
     pressStartRef.current = null;
     didDragRef.current = false;
+    onMovingEventChange?.(false);
   };
 
   // --------------------------------------------------------------------------
@@ -1039,13 +1080,15 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                         backgroundColor: theme.bgPastel,
                         borderLeftColor: theme.borderAccent,
                         WebkitTouchCallout: 'none',
-                        touchAction: 'pan-y',
+                        touchAction: 'none',
                       }}
+                      data-event-id={event.id}
                       className={clsx(
                         'event-card absolute z-10 rounded-2xl p-2.5 sm:p-3 shadow-xs border-l-[5px] border-t border-r border-b border-black/5 transition-all duration-150',
                         'hover:shadow-lg hover:scale-[1.01] hover:z-20 cursor-pointer overflow-hidden flex flex-col justify-between select-none active:scale-[0.98]',
                         isInspected && 'ring-2 ring-indigo-500 shadow-apple-lg z-30',
-                        isBeingMoved && 'opacity-25 border-dashed ring-2 ring-indigo-500/50 scale-[0.97]'
+                        isBeingMoved && 'opacity-25 border-dashed ring-2 ring-indigo-500/50 scale-[0.97]',
+                        pressingEventId === event.id && !isBeingMoved && 'scale-[0.98] ring-2 ring-indigo-400 brightness-95'
                       )}
                       title="Appui long pour déplacer cette activité sur l'emploi du temps"
                     >
