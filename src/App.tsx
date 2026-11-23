@@ -196,6 +196,7 @@ export function App() {
         userEmail={currentUser?.email || null}
         onSignOut={handleSignOut}
         onResetView={() => setActiveFocusView('all')}
+        onChangeFocusView={setActiveFocusView}
         activeFocusView={activeFocusView}
       />
 
@@ -323,11 +324,16 @@ export function App() {
                 onOpenImportModal={() => setIsImportModalOpen(true)}
                 pendingTasksCount={pendingTasksCount}
                 isExpandedFull={activeFocusView === 'calendar' || activeFocusView === 'month'}
-                forcedViewMode={activeFocusView === 'month' ? 'month' : undefined}
+                forcedViewMode={activeFocusView === 'month' ? 'month' : activeFocusView === 'calendar' ? 'week' : undefined}
                 onToggleExpand={() => {
                   if (activeFocusView === 'calendar' || activeFocusView === 'month') {
                     setActiveFocusView('all');
                   } else {
+                    setActiveFocusView('calendar');
+                  }
+                }}
+                onSwitchToWeek={() => {
+                  if (activeFocusView === 'month') {
                     setActiveFocusView('calendar');
                   }
                 }}

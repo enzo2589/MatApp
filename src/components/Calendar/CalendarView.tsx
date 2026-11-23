@@ -16,6 +16,7 @@ import {
   startOfWeek,
   eachDayOfInterval,
   getISOWeek,
+  parseISO,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
@@ -42,6 +43,7 @@ interface CalendarViewProps {
   onToggleExpand?: () => void;
   isExpandedFull?: boolean;
   forcedViewMode?: CalendarViewMode;
+  onSwitchToWeek?: () => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -54,6 +56,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onToggleExpand,
   isExpandedFull = false,
   forcedViewMode,
+  onSwitchToWeek,
 }) => {
   const [internalDate, setInternalDate] = useState<Date>(() => {
     try {
@@ -229,11 +232,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
 
           {viewMode === 'week' ? (
-            <div className="flex items-center gap-1.5 md:gap-2 ml-1 flex-wrap">
-              <span className="text-[11px] md:text-xs font-black text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 rounded-lg shadow-2xs">
+            <div
+              onClick={onToggleExpand}
+              className={clsx(
+                "flex items-center gap-1.5 md:gap-2 ml-1 flex-wrap transition-all",
+                onToggleExpand && "cursor-pointer group hover:opacity-90"
+              )}
+              title={isExpandedFull ? "Réduire (Vue d'ensemble 3 panneaux)" : "Agrandir uniquement la semaine (Zoom Semaine)"}
+            >
+              <span className="text-[11px] md:text-xs font-black text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 rounded-lg shadow-2xs group-hover:bg-indigo-100 group-hover:border-indigo-300 transition-colors">
                 Semaine {isoWeekNumber}
               </span>
-              <h2 className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 tracking-tight">
+              <h2 className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
                 {format(weekStart, 'd')} - {format(weekEnd, 'd MMMM yyyy', { locale: fr })}
               </h2>
             </div>
@@ -249,9 +259,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
             <button
               type="button"
-              onClick={() => setViewMode('week')}
+              onClick={() => {
+                setViewMode('week');
+                if (onSwitchToWeek) onSwitchToWeek();
+              }}
               className={clsx(
-                'px-2.5 py-1 rounded-lg text-xs font-bold transition-all',
+                'px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer',
                 viewMode === 'week'
                   ? 'bg-white text-indigo-700 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -274,18 +287,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
           </div>
 
-          {/* Bouton Agrandir / Réduire */}
+          {/* Bouton Agrandir / Zoom Semaine / Zoom Mois */}
           {onToggleExpand && (
             <button
               type="button"
               onClick={onToggleExpand}
               className={clsx(
-                'flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-2xs',
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-2xs',
                 isExpandedFull
                   ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
-                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 hover:border-indigo-300'
               )}
-              title={isExpandedFull ? "Réduire à la vue normale" : "Agrandir l'emploi du temps en grand format"}
+              title={isExpandedFull ? "Réduire à la vue normale (3 panneaux)" : `Agrandir ${viewMode === 'week' ? 'la semaine' : 'le mois'} en grand`}
             >
               {isExpandedFull ? (
                 <>
@@ -295,7 +308,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               ) : (
                 <>
                   <Maximize2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Plein écran</span>
+                  <span>{viewMode === 'week' ? 'Zoom Semaine' : 'Zoom Mois'}</span>
                 </>
               )}
             </button>
@@ -333,18 +346,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
           )}
 
-          {/* Bouton Nouvel Événement */}
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedEventData(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Nouvelle activité</span>
-          </button>
+          {/* Bouton Nouvel Événement (uniquement en vue semaine, désactivé dans la vue globale mois) */}
+          {viewMode === 'week' && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedEventData(null);
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Nouvelle activité</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -363,8 +378,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <MonthGrid
                 currentDate={currentDate}
                 events={events || []}
-                onSelectSlot={handleSelectSlot}
-                onSelectEvent={handleSelectEvent}
+                onSelectDay={(day) => {
+                  handleUpdateDate(day);
+                  setViewMode('week');
+                  if (onSwitchToWeek) onSwitchToWeek();
+                }}
+                onSelectEvent={(event) => {
+                  try {
+                    const d = parseISO(event.start_time);
+                    handleUpdateDate(d);
+                    setViewMode('week');
+                    if (onSwitchToWeek) onSwitchToWeek();
+                  } catch {}
+                  handleSelectEvent(event);
+                }}
               />
             ) : (
               <WeekGrid

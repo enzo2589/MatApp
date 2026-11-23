@@ -1121,25 +1121,25 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
         </div>
       </div>
 
-      {/* CONTRÔLEUR DE ZOOM TACTILE FLOTTANT (Idéal pour iPad) */}
-      <div className="absolute bottom-4 left-4 z-40 bg-white/90 backdrop-blur-md rounded-2xl shadow-apple border border-slate-200/80 p-1 flex items-center gap-1">
+      {/* CONTRÔLEUR DE ZOOM TACTILE FLOTTANT (Idéal pour iPad et grand écran) */}
+      <div className="absolute bottom-4 left-4 z-40 bg-white/95 backdrop-blur-md rounded-2xl shadow-apple border border-slate-200/90 p-1 flex items-center gap-1 select-none">
         <button
           type="button"
           onClick={() => handleSetHourHeight(Math.max(65, hourHeight - 15))}
-          className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors active:scale-95"
+          className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-xl transition-all active:scale-95 cursor-pointer"
           title="Zoom arrière (vue dense)"
         >
           <Minus className="w-3.5 h-3.5" />
         </button>
 
-        <span className="text-[10px] font-extrabold text-slate-600 px-2 uppercase tracking-wider">
-          {hourHeight <= 80 ? 'Compact' : hourHeight >= 130 ? 'Pencil iPad' : 'Grand'}
+        <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100 uppercase tracking-wider">
+          {hourHeight <= 80 ? 'Compact' : hourHeight >= 135 ? 'Maxi iPad' : 'Grand'}
         </span>
 
         <button
           type="button"
           onClick={() => handleSetHourHeight(Math.min(180, hourHeight + 15))}
-          className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors active:scale-95"
+          className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-xl transition-all active:scale-95 cursor-pointer"
           title="Zoom avant (confort Apple Pencil)"
         >
           <Plus className="w-3.5 h-3.5" />
