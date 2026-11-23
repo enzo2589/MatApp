@@ -287,8 +287,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
           </div>
 
-          {/* Bouton Agrandir / Zoom Semaine / Zoom Mois */}
-          {onToggleExpand && (
+          {/* Bouton Plein écran / Réduire (pour la semaine) */}
+          {viewMode === 'week' && onToggleExpand && (
             <button
               type="button"
               onClick={onToggleExpand}
@@ -296,19 +296,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 'flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-2xs',
                 isExpandedFull
                   ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
-                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 hover:border-indigo-300'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
               )}
-              title={isExpandedFull ? "Réduire à la vue normale (3 panneaux)" : `Agrandir ${viewMode === 'week' ? 'la semaine' : 'le mois'} en grand`}
+              title={isExpandedFull ? "Réduire à la vue normale (3 panneaux)" : "Afficher l'emploi du temps de la semaine en plein écran"}
             >
               {isExpandedFull ? (
                 <>
                   <Minimize2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Vue d'ensemble</span>
+                  <span className="hidden sm:inline">Réduire</span>
                 </>
               ) : (
                 <>
                   <Maximize2 className="w-3.5 h-3.5" />
-                  <span>{viewMode === 'week' ? 'Zoom Semaine' : 'Zoom Mois'}</span>
+                  <span className="hidden sm:inline">Plein écran</span>
                 </>
               )}
             </button>

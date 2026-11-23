@@ -8,10 +8,6 @@ import {
   LogOut,
   User as UserIcon,
   GraduationCap,
-  LayoutGrid,
-  Calendar,
-  CalendarDays,
-  CheckSquare,
 } from 'lucide-react';
 import { alarmService } from '../services/alarmService';
 import { clsx } from 'clsx';
@@ -24,8 +20,7 @@ interface HeaderProps {
   userEmail?: string | null;
   onSignOut?: () => void;
   onResetView?: () => void;
-  onChangeFocusView?: (view: 'all' | 'calendar' | 'todo' | 'month') => void;
-  activeFocusView?: 'all' | 'calendar' | 'todo' | 'month';
+  activeFocusView?: 'all' | 'calendar' | 'todo';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,7 +31,6 @@ export const Header: React.FC<HeaderProps> = ({
   userEmail,
   onSignOut,
   onResetView,
-  onChangeFocusView,
   activeFocusView = 'all',
 }) => {
   const [hasNotifPermission, setHasNotifPermission] = useState(alarmService.hasNotificationPermission());
@@ -108,94 +102,7 @@ export const Header: React.FC<HeaderProps> = ({
             </p>
           </div>
         </div>
-
-        {/* Bouton contextuel : Revenir à la vue d'ensemble si un focus est actif */}
-        {activeFocusView !== 'all' && onResetView && (
-          <button
-            type="button"
-            onClick={onResetView}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer ml-1 animate-fadeIn"
-            title="Revenir à la page principale (Semaine + Tâches + Mois)"
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">← Vue d'ensemble</span>
-            <span className="md:hidden">← Retour</span>
-          </button>
-        )}
       </div>
-
-      {/* Sélecteur de Zoom & Vues (Accessible sur Desktop et Tablettes) */}
-      {onChangeFocusView && (
-        <div className="hidden lg:flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => onChangeFocusView('all')}
-            className={clsx(
-              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              activeFocusView === 'all'
-                ? "bg-white text-indigo-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            )}
-            title="Vue complète avec les 3 panneaux (Mois + Image + To-Do List + Semaine)"
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span>3 Panneaux</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onChangeFocusView('calendar')}
-            className={clsx(
-              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              activeFocusView === 'calendar'
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            )}
-            title="Zoom uniquement sur l'emploi du temps de la semaine"
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Zoom Semaine</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onChangeFocusView('month')}
-            className={clsx(
-              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              activeFocusView === 'month'
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            )}
-            title="Zoom uniquement sur le calendrier du mois"
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            <span>Zoom Mois</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onChangeFocusView('todo')}
-            className={clsx(
-              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 relative",
-              activeFocusView === 'todo'
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            )}
-            title="Zoom uniquement sur la To-Do List en grand format"
-          >
-            <CheckSquare className="w-3.5 h-3.5" />
-            <span>Zoom Tâches</span>
-            {pendingTasksCount > 0 && (
-              <span className={clsx(
-                "w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold",
-                activeFocusView === 'todo' ? "bg-white text-indigo-700" : "bg-red-500 text-white"
-              )}>
-                {pendingTasksCount}
-              </span>
-            )}
-          </button>
-        </div>
-      )}
 
       {/* Actions de l'En-tête */}
       <div className="flex items-center gap-2">

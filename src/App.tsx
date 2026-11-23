@@ -69,7 +69,7 @@ export function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isMobileTodoOpen, setIsMobileTodoOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'calendar' | 'sidebar' | 'todo'>('calendar');
-  const [activeFocusView, setActiveFocusView] = useState<'all' | 'calendar' | 'todo' | 'month'>('all');
+  const [activeFocusView, setActiveFocusView] = useState<'all' | 'calendar' | 'todo'>('all');
 
   const handleUpdateCurrentDate = (newDate: Date) => {
     setCurrentDate(newDate);
@@ -196,7 +196,6 @@ export function App() {
         userEmail={currentUser?.email || null}
         onSignOut={handleSignOut}
         onResetView={() => setActiveFocusView('all')}
-        onChangeFocusView={setActiveFocusView}
         activeFocusView={activeFocusView}
       />
 
@@ -280,7 +279,7 @@ export function App() {
                   mobileTab === 'calendar' ? 'hidden md:flex' : 'flex'
                 )}
               >
-                {/* Bloc 1 : "MOIS" avec possibilité d'agrandir en grand */}
+                {/* Bloc 1 : "MOIS" */}
                 <div className={clsx(mobileTab === 'todo' ? 'hidden md:block' : 'block')}>
                   <MiniMonthPicker
                     currentDate={currentDate}
@@ -289,7 +288,6 @@ export function App() {
                       setMobileTab('calendar');
                     }}
                     events={allEvents || []}
-                    onExpand={() => setActiveFocusView('month')}
                   />
                 </div>
 
@@ -309,7 +307,7 @@ export function App() {
               </aside>
             )}
 
-            {/* PANNEAU DROIT (Grand agenda interactif de la SEMAINE ou du MOIS) */}
+            {/* PANNEAU DROIT (Agenda de la SEMAINE, plein écran si activeFocusView === 'calendar') */}
             <div
               className={clsx(
                 'flex-1 h-full flex flex-col overflow-hidden',
@@ -323,19 +321,9 @@ export function App() {
                 onOpenTodoList={() => setIsMobileTodoOpen(true)}
                 onOpenImportModal={() => setIsImportModalOpen(true)}
                 pendingTasksCount={pendingTasksCount}
-                isExpandedFull={activeFocusView === 'calendar' || activeFocusView === 'month'}
-                forcedViewMode={activeFocusView === 'month' ? 'month' : activeFocusView === 'calendar' ? 'week' : undefined}
+                isExpandedFull={activeFocusView === 'calendar'}
                 onToggleExpand={() => {
-                  if (activeFocusView === 'calendar' || activeFocusView === 'month') {
-                    setActiveFocusView('all');
-                  } else {
-                    setActiveFocusView('calendar');
-                  }
-                }}
-                onSwitchToWeek={() => {
-                  if (activeFocusView === 'month') {
-                    setActiveFocusView('calendar');
-                  }
+                  setActiveFocusView((prev) => (prev === 'calendar' ? 'all' : 'calendar'));
                 }}
               />
             </div>

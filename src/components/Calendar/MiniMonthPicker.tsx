@@ -15,7 +15,7 @@ import {
   isBefore,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Palette, Maximize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Palette } from 'lucide-react';
 import { clsx } from 'clsx';
 import { EventItem, DayHighlight } from '../../types';
 import { getDayHighlights, subscribePreferences } from '../../services/studentPreferences';
@@ -25,14 +25,12 @@ interface MiniMonthPickerProps {
   currentDate: Date;
   onSelectDate: (date: Date) => void;
   events?: EventItem[];
-  onExpand?: () => void;
 }
 
 export const MiniMonthPicker: React.FC<MiniMonthPickerProps> = ({
   currentDate,
   onSelectDate,
   events = [],
-  onExpand,
 }) => {
   const [viewMonth, setViewMonth] = useState<Date>(currentDate);
   const [dayHighlights, setDayHighlights] = useState<Record<string, DayHighlight>>(getDayHighlights());
@@ -79,34 +77,18 @@ export const MiniMonthPicker: React.FC<MiniMonthPickerProps> = ({
 
   return (
     <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/80 select-none">
-      {/* En-tête : "MOIS" avec Navigation & Bouton Colorer & Bouton Agrandir */}
+      {/* En-tête : "MOIS" avec Navigation & Bouton Colorer */}
       <div className="flex items-center justify-between mb-2 px-1">
-        <div
-          onClick={onExpand}
-          className={clsx("flex items-center gap-1.5", onExpand && "cursor-pointer group")}
-          title={onExpand ? "Cliquer pour afficher le calendrier du mois en grand" : undefined}
-        >
-          <span className="text-[11px] font-extrabold uppercase tracking-widest text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md group-hover:bg-indigo-100 transition-colors">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-extrabold uppercase tracking-widest text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md">
             Mois
           </span>
-          <h3 className="text-xs font-bold text-slate-800 capitalize group-hover:text-indigo-600 transition-colors">
+          <h3 className="text-xs font-bold text-slate-800 capitalize">
             {format(viewMonth, 'MMMM yyyy', { locale: fr })}
           </h3>
         </div>
 
         <div className="flex items-center gap-0.5">
-          {/* Bouton pour agrandir le mois en plein écran */}
-          {onExpand && (
-            <button
-              type="button"
-              onClick={onExpand}
-              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors mr-0.5 cursor-pointer"
-              title="Agrandir le calendrier du mois en grand"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-
           {/* Bouton pour colorer le jour actuellement sélectionné */}
           <button
             type="button"
