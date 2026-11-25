@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, saveLocalTask, toggleTaskCompletion, deleteLocalTask, getCurrentUserId } from '../../db/localDb';
-import { MEDICAL_COLORS, getColorTheme } from '../../constants/colors';
-import { alarmService } from '../../services/alarmService';
+import { MEDICAL_COLORS } from '../../constants/colors';
+import { TaskItem } from '../../types';
+import { TaskItemRow } from './TaskItemRow';
+import { EditTaskModal } from './EditTaskModal';
 import {
   CheckCircle2,
   Circle,
@@ -17,6 +19,7 @@ import {
   Minimize2,
   Sparkles,
   Filter,
+  Pencil,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -53,6 +56,10 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
   const [alarmOption, setAlarmOption] = useState<'none' | '1h' | 'today_evening' | 'tomorrow_morning'>('none');
   const [isCompletedOpen, setIsCompletedOpen] = useState(false);
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'completed'>('all');
+
+  // État de modification d'une tâche
+  const [taskToEdit, setTaskToEdit] = useState<TaskItem | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Live Query Dexie réactif instantané (0 ms) STRICTEMENT filtré par utilisateur
   const activeUserId = userId || getCurrentUserId();
@@ -105,9 +112,26 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
     await toggleTaskCompletion(id);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteTask = async (id: string) => {
     await deleteLocalTask(id);
+  };
+
+  const handleOpenEdit = (task: TaskItem) => {
+    setTaskToEdit(task);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditedTask = async (
+    taskId: string,
+    updates: { title: string; color: string; alarm_time: string | null }
+  ) => {
+    await saveLocalTask({
+      id: taskId,
+      user_id: activeUserId,
+      title: updates.title,
+      color: updates.color,
+      alarm_time: updates.alarm_time,
+    });
   };
 
   const handleClearCompleted = async () => {
@@ -451,87 +475,16 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
         {/* Liste des tâches actives (affichée si mode 'all' ou 'active') */}
         {filterMode !== 'completed' && (
           <AnimatePresence initial={false}>
-            {activeTasks.map((task) => {
-              const theme = getColorTheme(task.color);
-
-              return (
-                <motion.div
-                  key={task.id}
-                  layout
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  onClick={() => handleToggle(task.id)}
-                  className={clsx(
-                    "group relative flex items-start bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-xs transition-all cursor-pointer touch-pan-y active:scale-[0.99]",
-                    isExpandedFull ? "p-3.5 md:p-4 rounded-2xl gap-3.5" : "p-2 rounded-xl gap-2"
-                  )}
-                  style={{
-                    borderLeftWidth: isExpandedFull ? '4px' : '3px',
-                    borderLeftColor: theme.borderAccent || theme.hex,
-                  }}
-                >
-                  {/* Case à cocher circulaire */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggle(task.id);
-                    }}
-                    className={clsx(
-                      "mt-0.5 text-slate-300 group-hover:text-emerald-600 transition-colors shrink-0",
-                      isExpandedFull ? "p-0.5" : ""
-                    )}
-                  >
-                    <Circle className={clsx(isExpandedFull ? "w-5 h-5 stroke-[2]" : "w-4 h-4 stroke-[1.8]")} />
-                  </button>
-
-                  {/* Corps de la tâche */}
-                  <div className="flex-1 min-w-0 pr-6 select-none">
-                    <p className={clsx(
-                      "leading-snug break-words text-slate-800",
-                      isExpandedFull ? "text-sm md:text-base font-semibold" : "text-xs font-medium"
-                    )}>
-                      {task.title}
-                    </p>
-
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {/* Badge catégorie en mode grand */}
-                      {isExpandedFull && theme.name && (
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: theme.hex }} />
-                          {theme.name}
-                        </span>
-                      )}
-
-                      {task.alarm_time && (
-                        <div className={clsx(
-                          "flex items-center gap-1 text-amber-700 font-semibold",
-                          isExpandedFull ? "text-xs bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/70" : "text-[10px]"
-                        )}>
-                          <Clock className={clsx(isExpandedFull ? "w-3 h-3 text-amber-600" : "w-2.5 h-2.5 text-amber-600")} />
-                          <span>{format(parseISO(task.alarm_time), 'HH:mm dd/MM', { locale: fr })}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Bouton de suppression */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleDelete(task.id, e)}
-                    className={clsx(
-                      "transition-all absolute top-2 right-2 text-slate-300 hover:text-red-500 rounded-lg cursor-pointer",
-                      isExpandedFull ? "opacity-60 hover:opacity-100 p-1.5 hover:bg-red-50" : "opacity-40 hover:opacity-100 p-1 hover:bg-red-50"
-                    )}
-                    title="Supprimer la tâche"
-                  >
-                    <Trash2 className={clsx(isExpandedFull ? "w-4 h-4" : "w-3 h-3")} />
-                  </button>
-                </motion.div>
-              );
-            })}
+            {activeTasks.map((task) => (
+              <TaskItemRow
+                key={task.id}
+                task={task}
+                isExpandedFull={isExpandedFull}
+                onToggle={handleToggle}
+                onDelete={handleDeleteTask}
+                onEdit={handleOpenEdit}
+              />
+            ))}
           </AnimatePresence>
         )}
 
@@ -588,14 +541,38 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                     )}>
                       {task.title}
                     </span>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDelete(task.id, e)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-all cursor-pointer"
-                      title="Supprimer"
-                    >
-                      <Trash2 className={clsx(isExpandedFull ? "w-4 h-4" : "w-3 h-3")} />
-                    </button>
+
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEdit(task);
+                        }}
+                        className={clsx(
+                          "transition-all text-slate-300 hover:text-indigo-600 rounded-lg cursor-pointer",
+                          isExpandedFull ? "opacity-60 hover:opacity-100 p-1.5 hover:bg-indigo-50" : "opacity-40 hover:opacity-100 p-1 hover:bg-indigo-50"
+                        )}
+                        title="Modifier"
+                      >
+                        <Pencil className={clsx(isExpandedFull ? "w-4 h-4" : "w-3 h-3")} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTask(task.id);
+                        }}
+                        className={clsx(
+                          "transition-all text-slate-300 hover:text-red-500 rounded-lg cursor-pointer",
+                          isExpandedFull ? "opacity-60 hover:opacity-100 p-1.5 hover:bg-red-50" : "opacity-40 hover:opacity-100 p-1 hover:bg-red-50"
+                        )}
+                        title="Supprimer"
+                      >
+                        <Trash2 className={clsx(isExpandedFull ? "w-4 h-4" : "w-3 h-3")} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </motion.div>
@@ -603,6 +580,18 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de modification de tâche */}
+      <EditTaskModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setTaskToEdit(null);
+        }}
+        task={taskToEdit}
+        onSave={handleSaveEditedTask}
+        onDelete={handleDeleteTask}
+      />
     </div>
   );
 };
