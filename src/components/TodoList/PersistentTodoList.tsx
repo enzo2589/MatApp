@@ -528,15 +528,26 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                 {completedTasks.map((task) => (
                   <div
                     key={task.id}
-                    onClick={() => handleToggle(task.id)}
                     className={clsx(
-                      "group flex items-center gap-2 rounded-xl bg-slate-50/60 border border-slate-100 opacity-60 hover:opacity-90 cursor-pointer transition-opacity",
+                      "group flex items-center gap-2 rounded-xl bg-slate-50/60 border border-slate-100 opacity-60 hover:opacity-90 transition-opacity",
                       isExpandedFull ? "p-3" : "p-1.5"
                     )}
                   >
-                    <CheckCircle2 className={clsx(isExpandedFull ? "w-4 h-4" : "w-3.5 h-3.5", "text-emerald-600 shrink-0")} />
+                    {/* Case à cocher pour réactiver la tâche */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggle(task.id);
+                      }}
+                      className="text-emerald-600 hover:text-slate-400 active:scale-90 transition-all cursor-pointer shrink-0 rounded-full p-1 -m-1 focus:outline-none"
+                      title="Cliquer sur le rond pour réactiver la tâche"
+                    >
+                      <CheckCircle2 className={clsx(isExpandedFull ? "w-4 h-4" : "w-3.5 h-3.5")} />
+                    </button>
+
                     <span className={clsx(
-                      "flex-1 text-slate-500 line-through truncate",
+                      "flex-1 text-slate-500 line-through truncate select-none",
                       isExpandedFull ? "text-sm" : "text-[11px]"
                     )}>
                       {task.title}

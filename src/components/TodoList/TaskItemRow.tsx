@@ -68,14 +68,6 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
     }
   };
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    if (isDraggingRef.current) {
-      e.stopPropagation();
-      return;
-    }
-    onToggle(task.id);
-  };
-
   return (
     <div className="relative overflow-hidden rounded-xl md:rounded-2xl select-none touch-pan-y">
       {/* Arrière-plan d'action (Révélé lors du glissement) */}
@@ -152,9 +144,8 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
         onDragStart={handleDragStart}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
-        onClick={handleCardClick}
         className={clsx(
-          "group relative flex items-start bg-slate-50/95 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-xs transition-colors cursor-pointer touch-pan-y active:scale-[0.99]",
+          "group relative flex items-start bg-slate-50/95 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-xs transition-colors touch-pan-y",
           isExpandedFull ? "p-3.5 md:p-4 rounded-2xl gap-3.5" : "p-2 rounded-xl gap-2"
         )}
         style={{
@@ -162,7 +153,7 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
           borderLeftColor: theme.borderAccent || theme.hex,
         }}
       >
-        {/* Case à cocher circulaire */}
+        {/* Case à cocher circulaire (EXCLUSIVEMENT ce rond valide la tâche) */}
         <button
           type="button"
           onClick={(e) => {
@@ -170,12 +161,12 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
             onToggle(task.id);
           }}
           className={clsx(
-            "mt-0.5 text-slate-300 group-hover:text-emerald-600 transition-colors shrink-0",
-            isExpandedFull ? "p-0.5" : ""
+            "mt-0.5 text-slate-300 hover:text-emerald-600 active:scale-90 transition-all shrink-0 cursor-pointer rounded-full p-1 -m-1 hover:bg-emerald-50 focus:outline-none",
+            isExpandedFull ? "p-1.5 -m-1" : ""
           )}
-          title="Marquer comme terminée"
+          title="Cliquer sur le rond pour marquer comme terminée"
         >
-          <Circle className={clsx(isExpandedFull ? "w-5 h-5 stroke-[2]" : "w-4 h-4 stroke-[1.8]")} />
+          <Circle className={clsx(isExpandedFull ? "w-5 h-5 stroke-[2.2]" : "w-4 h-4 stroke-[2]")} />
         </button>
 
         {/* Corps de la tâche */}
