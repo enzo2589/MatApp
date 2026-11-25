@@ -713,7 +713,6 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     };
     didDragRef.current = false;
     setIsPressingEventId(event.id);
-    onMovingEventChange?.(true);
 
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -722,6 +721,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     // Déclenchement tactile rapide et réactif de l'appui long (280ms)
     longPressTimerRef.current = window.setTimeout(() => {
       if (!pressStartRef.current) return;
+      onMovingEventChange?.(true);
 
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         try {
@@ -793,7 +793,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     }
   };
 
-  const handleEventPointerUp = async (e: React.PointerEvent) => {
+  const handleEventPointerUp = async (e: React.PointerEvent, event: EventItem) => {
     e.stopPropagation();
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -802,52 +802,67 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
 
     setIsPressingEventId(null);
 
-    if (!movingEvent) {
+    // CAS 1 : UN SIMPLE CLIC / TAP SUR LA CARTE (la carte n'était pas en cours de déplacement)
+    if (!movingEvent && !didDragRef.current) {
+      const start = pressStartRef.current;
       pressStartRef.current = null;
       onMovingEventChange?.(false);
+
+      if (start) {
+        const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+        // Si le pointeur n'a pas bougé de plus de 20px, c'est un tap/clic franc
+        if (dist <= 20) {
+          setQuickInspectEvent(event);
+        }
+      } else {
+        setQuickInspectEvent(event);
+      }
       return;
     }
 
-    lastCardDragEndTimeRef.current = Date.now();
+    // CAS 2 : LA CARTE A ÉTÉ DÉPLACÉE (DÉPÔT À SON NOUVEL HORAIRE)
+    if (movingEvent) {
+      lastCardDragEndTimeRef.current = Date.now();
 
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {}
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {}
 
-    const { event, durationMinutes, originalDay, originalStartMinutes, targetDay, targetStartMinutes } =
-      movingEvent;
-    setMovingEvent(null);
-    pressStartRef.current = null;
-    onMovingEventChange?.(false);
+      const { event: currentEv, durationMinutes, originalDay, originalStartMinutes, targetDay, targetStartMinutes } =
+        movingEvent;
+      setMovingEvent(null);
+      pressStartRef.current = null;
+      onMovingEventChange?.(false);
 
-    const originalDayKey = format(originalDay, 'yyyy-MM-dd');
-    const targetDayKey = format(targetDay, 'yyyy-MM-dd');
+      const originalDayKey = format(originalDay, 'yyyy-MM-dd');
+      const targetDayKey = format(targetDay, 'yyyy-MM-dd');
 
-    if (originalDayKey !== targetDayKey || originalStartMinutes !== targetStartMinutes) {
-      const startH = Math.floor(targetStartMinutes / 60);
-      const startM = targetStartMinutes % 60;
-      const newStartDate = setMinutes(setHours(targetDay, startH), startM);
-      const newEndDate = addMinutes(newStartDate, durationMinutes);
+      if (originalDayKey !== targetDayKey || originalStartMinutes !== targetStartMinutes) {
+        const startH = Math.floor(targetStartMinutes / 60);
+        const startM = targetStartMinutes % 60;
+        const newStartDate = setMinutes(setHours(targetDay, startH), startM);
+        const newEndDate = addMinutes(newStartDate, durationMinutes);
 
-      const updated: EventItem = {
-        ...event,
-        start_time: newStartDate.toISOString(),
-        end_time: newEndDate.toISOString(),
-      };
+        const updated: EventItem = {
+          ...currentEv,
+          start_time: newStartDate.toISOString(),
+          end_time: newEndDate.toISOString(),
+        };
 
-      await saveLocalEvent(updated);
+        await saveLocalEvent(updated);
 
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        try {
-          navigator.vibrate(25);
-        } catch {}
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          try {
+            navigator.vibrate(25);
+          } catch {}
+        }
       }
-    }
 
-    lastCardDragEndTimeRef.current = Date.now();
-    setTimeout(() => {
-      didDragRef.current = false;
-    }, 500);
+      lastCardDragEndTimeRef.current = Date.now();
+      setTimeout(() => {
+        didDragRef.current = false;
+      }, 400);
+    }
   };
 
   const handleEventPointerCancel = (e: React.PointerEvent) => {
@@ -859,11 +874,13 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {}
-    setMovingEvent(null);
+    if (movingEvent) {
+      lastCardDragEndTimeRef.current = Date.now();
+      setMovingEvent(null);
+    }
     setIsPressingEventId(null);
     pressStartRef.current = null;
     didDragRef.current = false;
-    lastCardDragEndTimeRef.current = Date.now();
     onMovingEventChange?.(false);
   };
 
@@ -1208,7 +1225,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                       key={event.id}
                       onPointerDown={(e) => handleEventPointerDown(e, event)}
                       onPointerMove={handleEventPointerMove}
-                      onPointerUp={handleEventPointerUp}
+                      onPointerUp={(e) => handleEventPointerUp(e, event)}
                       onPointerCancel={handleEventPointerCancel}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -1218,7 +1235,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                         if (
                           didDragRef.current ||
                           movingEvent ||
-                          Date.now() - lastCardDragEndTimeRef.current < 600
+                          Date.now() - lastCardDragEndTimeRef.current < 400
                         ) {
                           return;
                         }
