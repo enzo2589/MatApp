@@ -211,3 +211,67 @@ export function setDayHighlight(dateStr: string, highlight: { color: string; lab
   localStorage.setItem(STORAGE_DAY_HIGHLIGHTS_KEY, JSON.stringify(current));
   notifyChange();
 }
+
+
+/* ==============================================================================
+   GESTION DES SUGGESTIONS RAPIDES DE TÂCHES (TO-DO)
+   ============================================================================== */
+export interface TaskSuggestion {
+  id: string;
+  label: string;
+  color: string;
+}
+
+const STORAGE_TASK_SUGGESTIONS_KEY = 'medagenda_task_suggestions';
+
+export const INITIAL_TASK_SUGGESTIONS: TaskSuggestion[] = [
+  { id: 'sug-anki', label: 'Anki 150 cartes', color: '#10B981' },
+  { id: 'sug-edn', label: 'Fiches EDN', color: '#F59E0B' },
+  { id: 'sug-stage', label: 'Carnet de stage', color: '#06B6D4' },
+  { id: 'sug-qcm', label: 'QCM annales', color: '#D946EF' },
+  { id: 'sug-poly', label: 'Polycopié', color: '#4F46E5' },
+];
+
+export function getTaskSuggestions(): TaskSuggestion[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_TASK_SUGGESTIONS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.warn('Erreur lecture task suggestions:', e);
+  }
+  return INITIAL_TASK_SUGGESTIONS;
+}
+
+export function addTaskSuggestion(suggestion: { label: string; color?: string }): TaskSuggestion {
+  const current = getTaskSuggestions();
+  const trimmed = suggestion.label.trim();
+  const existing = current.find((s) => s.label.toLowerCase() === trimmed.toLowerCase());
+  if (existing) return existing;
+
+  const newSug: TaskSuggestion = {
+    id: `sug-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    label: trimmed,
+    color: suggestion.color || '#10B981',
+  };
+
+  const updated = [...current, newSug];
+  localStorage.setItem(STORAGE_TASK_SUGGESTIONS_KEY, JSON.stringify(updated));
+  notifyChange();
+  return newSug;
+}
+
+export function deleteTaskSuggestion(id: string): void {
+  const current = getTaskSuggestions();
+  const updated = current.filter((s) => s.id !== id);
+  localStorage.setItem(STORAGE_TASK_SUGGESTIONS_KEY, JSON.stringify(updated));
+  notifyChange();
+}
+
+export function resetTaskSuggestions(): TaskSuggestion[] {
+  localStorage.setItem(STORAGE_TASK_SUGGESTIONS_KEY, JSON.stringify(INITIAL_TASK_SUGGESTIONS));
+  notifyChange();
+  return INITIAL_TASK_SUGGESTIONS;
+}

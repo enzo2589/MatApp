@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Clock, Check, Pencil, Sparkles } from 'lucide-react';
+import { X, Trash2, Clock, Check, Pencil } from 'lucide-react';
 import { clsx } from 'clsx';
-import { format, parseISO } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { format } from 'date-fns';
 import { TaskItem } from '../../types';
 import { MEDICAL_COLORS } from '../../constants/colors';
 
@@ -110,23 +109,23 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-xs">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          initial={{ opacity: 0, scale: 0.95, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+          exit={{ opacity: 0, scale: 0.95, y: 8 }}
           transition={{ duration: 0.18 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-lg overflow-hidden flex flex-col"
+          className="bg-white rounded-[28px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.15)] border border-slate-200/80 w-full max-w-lg overflow-hidden flex flex-col"
         >
           {/* Header */}
           <div className="flex items-center justify-between p-5 md:p-6 border-b border-slate-100">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-2xs">
-                <Pencil className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <Pencil className="w-4.5 h-4.5 stroke-[2.2]" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-800">Modifier la tâche</h3>
+                <h3 className="text-base font-semibold text-slate-900 tracking-tight">Modifier la tâche</h3>
                 <p className="text-xs text-slate-400">Ajustez le titre, la catégorie ou le rappel</p>
               </div>
             </div>
@@ -134,10 +133,10 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
               title="Fermer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
 
@@ -145,7 +144,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
           <form onSubmit={handleSubmit} className="p-5 md:p-6 space-y-5 flex-1 overflow-y-auto">
             {/* Titre */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
                 Titre de la tâche
               </label>
               <input
@@ -154,13 +153,13 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ex. Réviser Cardiologie EDN, Flashcards Anki..."
-                className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 rounded-2xl px-4 py-3 text-sm text-slate-800 font-medium transition-all outline-none"
+                className="w-full bg-slate-100/70 border border-slate-200/60 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 rounded-2xl px-4 py-2.5 text-sm text-slate-850 font-normal transition-all outline-none"
               />
             </div>
 
             {/* Catégories / Couleurs */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
                 Catégorie & Couleur
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -172,19 +171,19 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                       type="button"
                       onClick={() => setColor(c.hex)}
                       className={clsx(
-                        "flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all cursor-pointer active:scale-95",
+                        "flex items-center gap-2 p-2 rounded-xl border text-left transition-all cursor-pointer active:scale-95",
                         isSelected
-                          ? "border-slate-800 bg-slate-50 shadow-xs"
-                          : "border-slate-200/80 hover:border-slate-300 hover:bg-slate-50/50"
+                          ? "border-slate-850 bg-slate-50 shadow-xs"
+                          : "border-slate-200/70 hover:border-slate-300 hover:bg-slate-50/50"
                       )}
                     >
                       <span
-                        className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center shadow-2xs"
+                        className="w-3.5 h-3.5 rounded-full shrink-0 flex items-center justify-center shadow-2xs"
                         style={{ backgroundColor: c.hex }}
                       >
-                        {isSelected && <Check className="w-2.5 h-2.5 text-white stroke-[3]" />}
+                        {isSelected && <Check className="w-2 h-2 text-white stroke-[3]" />}
                       </span>
-                      <span className="text-xs font-semibold text-slate-700 truncate">
+                      <span className="text-xs font-medium text-slate-700 truncate">
                         {c.name}
                       </span>
                     </button>
@@ -195,7 +194,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
 
             {/* Rappel / Alarme */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
                 Rappel & Notification
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
@@ -203,9 +202,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                   type="button"
                   onClick={() => setAlarmOption('none')}
                   className={clsx(
-                    "px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer",
+                    "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer",
                     alarmOption === 'none'
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs font-semibold"
                       : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   )}
                 >
@@ -215,9 +214,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                   type="button"
                   onClick={() => setAlarmOption('1h')}
                   className={clsx(
-                    "px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer",
+                    "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer",
                     alarmOption === '1h'
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs font-semibold"
                       : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   )}
                 >
@@ -227,9 +226,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                   type="button"
                   onClick={() => setAlarmOption('today_evening')}
                   className={clsx(
-                    "px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer",
+                    "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer",
                     alarmOption === 'today_evening'
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs font-semibold"
                       : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   )}
                 >
@@ -239,9 +238,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                   type="button"
                   onClick={() => setAlarmOption('tomorrow_morning')}
                   className={clsx(
-                    "px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer",
+                    "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer",
                     alarmOption === 'tomorrow_morning'
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs font-semibold"
                       : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   )}
                 >
@@ -263,7 +262,7 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                     className={clsx(
                       "flex-1 bg-slate-50 border rounded-xl px-3 py-1.5 text-xs font-medium text-slate-700 outline-none transition-all",
                       alarmOption === 'custom'
-                        ? "border-indigo-400 bg-white ring-2 ring-indigo-500/20"
+                        ? "border-indigo-400 bg-white ring-2 ring-indigo-500/15"
                         : "border-slate-200 hover:border-slate-300"
                     )}
                   />
@@ -289,9 +288,9 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                 type="button"
                 onClick={handleDelete}
                 disabled={isSubmitting}
-                className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 text-xs font-medium text-[#FF3B30] hover:bg-red-50 px-3 py-2 rounded-xl transition-colors cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5" />
                 <span>Supprimer</span>
               </button>
 
@@ -300,14 +299,14 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({
                   type="button"
                   onClick={onClose}
                   disabled={isSubmitting}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
                   disabled={!title.trim() || isSubmitting}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-40"
+                  className="px-5 py-2 rounded-xl text-xs font-medium bg-slate-900 hover:bg-black text-white shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-30"
                 >
                   {isSubmitting ? 'Enregistrement...' : 'Enregistrer'}
                 </button>
