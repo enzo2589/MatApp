@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { Circle, Clock, Trash2, Pencil } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format, parseISO } from 'date-fns';
@@ -25,11 +25,20 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
   onEdit,
 }) => {
   const [swipeStatus, setSwipeStatus] = useState<'none' | 'delete' | 'edit'>('none');
+  const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const theme = getColorTheme(task.color);
 
+  // Valeur de mouvement pour le drag horizontal
+  const x = useMotionValue(0);
+
+  // Opacité progressive des actions : strictement à 0 au repos ou lors de l'ajout/suppression
+  const editOpacity = useTransform(x, [0, 15, 75], [0, 0.4, 1]);
+  const deleteOpacity = useTransform(x, [-75, -15, 0], [1, 0.4, 0]);
+
   const handleDragStart = () => {
     isDraggingRef.current = true;
+    setIsDragging(true);
   };
 
   const handleDrag = (_: any, info: any) => {
@@ -56,6 +65,7 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
 
   const handleDragEnd = (_: any, info: any) => {
     setSwipeStatus('none');
+    setIsDragging(false);
     setTimeout(() => {
       isDraggingRef.current = false;
     }, 150);
@@ -69,11 +79,24 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-xl md:rounded-2xl select-none touch-pan-y">
-      {/* Arrière-plan d'action (Révélé lors du glissement) */}
-      <div className="absolute inset-0 flex items-stretch rounded-xl md:rounded-2xl overflow-hidden pointer-events-none">
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.15 }}
+      className="relative overflow-hidden rounded-xl md:rounded-2xl select-none touch-pan-y"
+    >
+      {/* Arrière-plan d'action (STRICTEMENT visible lors du drag actif, totalement masqué au repos ou à l'animation) */}
+      <div
+        className={clsx(
+          "absolute inset-0 flex items-stretch rounded-xl md:rounded-2xl overflow-hidden pointer-events-none transition-opacity duration-100",
+          isDragging ? "opacity-100" : "opacity-0"
+        )}
+      >
         {/* Action Gauche : Révélée quand la carte va TOUT AU FOND À DROITE -> MODIFIER */}
-        <div
+        <motion.div
+          style={{ opacity: editOpacity }}
           className={clsx(
             "w-1/2 flex items-center justify-start px-3.5 transition-colors duration-150",
             swipeStatus === 'edit'
@@ -98,10 +121,11 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
               {swipeStatus === 'edit' ? "Relâcher pour modifier" : "Glisser à fond pour modifier"}
             </span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Action Droite : Révélée quand la carte va TOUT AU FOND À GAUCHE -> SUPPRIMER */}
-        <div
+        <motion.div
+          style={{ opacity: deleteOpacity }}
           className={clsx(
             "w-1/2 flex items-center justify-end px-3.5 ml-auto transition-colors duration-150",
             swipeStatus === 'delete'
@@ -126,32 +150,28 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
               )}
             />
           </div>
-        </div>
+        </motion.div>
       </div>
 
-      {/* Carte Draggable au premier plan */}
+      {/* Carte Draggable au premier plan (100% opaque, aucun artefact de transparence) */}
       <motion.div
-        layout
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.15 }}
         drag="x"
         dragDirectionLock
         dragConstraints={{ left: -140, right: 140 }}
         dragElastic={0.25}
         dragSnapToOrigin
+        style={{
+          x,
+          borderLeftWidth: isExpandedFull ? '4px' : '3px',
+          borderLeftColor: theme.borderAccent || theme.hex,
+        }}
         onDragStart={handleDragStart}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
         className={clsx(
-          "group relative flex items-start bg-slate-50/95 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-xs transition-colors touch-pan-y",
+          "group relative flex items-start bg-slate-50 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-xs transition-colors touch-pan-y",
           isExpandedFull ? "p-3.5 md:p-4 rounded-2xl gap-3.5" : "p-2 rounded-xl gap-2"
         )}
-        style={{
-          borderLeftWidth: isExpandedFull ? '4px' : '3px',
-          borderLeftColor: theme.borderAccent || theme.hex,
-        }}
       >
         {/* Case à cocher circulaire (EXCLUSIVEMENT ce rond valide la tâche) */}
         <button
@@ -240,6 +260,6 @@ export const TaskItemRow: React.FC<TaskItemRowProps> = ({
           </button>
         </div>
       </motion.div>
-    </div>
+    </motion.div>
   );
 };
