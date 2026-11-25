@@ -427,7 +427,7 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
 
       {/* Liste des tâches */}
       <div className={clsx(
-        "flex-1 overflow-y-auto pr-0.5 scrollbar-thin scrollbar-thumb-slate-200",
+        "flex-1 overflow-y-auto pr-0.5 scrollbar-thin scrollbar-thumb-slate-200 touch-pan-y",
         isExpandedFull ? "space-y-2.5" : "space-y-1.5"
       )}>
         {/* État vide si aucune tâche active */}
@@ -461,16 +461,6 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  drag="x"
-                  dragConstraints={{ left: -40, right: 40 }}
-                  dragElastic={0.15}
-                  onDragEnd={(_, info) => {
-                    if (info.offset.x > 35) {
-                      handleToggle(task.id);
-                    } else if (info.offset.x < -35) {
-                      deleteLocalTask(task.id);
-                    }
-                  }}
                   transition={{ duration: 0.15 }}
                   onClick={() => handleToggle(task.id)}
                   className={clsx(
@@ -533,7 +523,7 @@ export const PersistentTodoList: React.FC<PersistentTodoListProps> = ({
                     onClick={(e) => handleDelete(task.id, e)}
                     className={clsx(
                       "transition-all absolute top-2 right-2 text-slate-300 hover:text-red-500 rounded-lg cursor-pointer",
-                      isExpandedFull ? "opacity-40 group-hover:opacity-100 p-1.5 hover:bg-red-50" : "opacity-0 group-hover:opacity-100 p-1"
+                      isExpandedFull ? "opacity-60 hover:opacity-100 p-1.5 hover:bg-red-50" : "opacity-40 hover:opacity-100 p-1 hover:bg-red-50"
                     )}
                     title="Supprimer la tâche"
                   >
