@@ -26,6 +26,7 @@ const COMMON_START_HOURS = [
   { label: '09:00', hour: 9, minute: 0 },
   { label: '10:00', hour: 10, minute: 0 },
   { label: '12:00', hour: 12, minute: 0 },
+  { label: '13:00', hour: 13, minute: 0 },
   { label: '13:30', hour: 13, minute: 30 },
   { label: '14:00', hour: 14, minute: 0 },
   { label: '16:00', hour: 16, minute: 0 },

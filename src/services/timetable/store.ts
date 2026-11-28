@@ -71,12 +71,7 @@ export function isGhostCourse(ev: {
     return true;
   }
 
-  // 3. Créneaux fantômes 12h-13h ou 12h30-13h30 (il n'y a jamais de cours à midi en PASS)
-  if (startTime.includes('T12:00:00') || startTime.includes('T12:30:00')) {
-    return true;
-  }
-
-  // 4. Férié fragmenté en tranches d'1h (le vrai férié PASS est un bloc complet de 4h 08h-12h)
+  // 3. Férié fragmenté en tranches d'1h (le vrai férié PASS est un bloc complet de 4h 08h-12h)
   if (
     (title === 'férié' || title === 'ferie') &&
     (startTime.includes('T09:00:00') || startTime.includes('T12:00:00'))

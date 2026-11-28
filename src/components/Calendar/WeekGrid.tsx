@@ -14,7 +14,6 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
-  Bell,
   Clock,
   Edit2,
   Trash2,
@@ -1255,10 +1254,10 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                       className={clsx(
                         'event-card absolute z-10 shadow-xs border-t border-r border-b border-black/5 transition-all duration-150',
                         isNarrow
-                          ? 'rounded-xl px-1.5 py-1.5 border-l-[3.5px]'
+                          ? (height < 45 ? 'rounded-lg px-1.5 py-0.5 border-l-[3.5px]' : 'rounded-xl px-1.5 py-1.5 border-l-[3.5px]')
                           : isMedium
-                          ? 'rounded-xl px-2 py-2 sm:px-2.5 sm:py-2.5 border-l-4'
-                          : 'rounded-2xl p-2.5 sm:p-3 border-l-[5px]',
+                          ? (height < 45 ? 'rounded-lg px-2 py-0.5 border-l-4' : 'rounded-xl px-2 py-1.5 sm:px-2.5 sm:py-2 border-l-4')
+                          : (height < 45 ? 'rounded-xl px-2.5 py-0.5 border-l-[5px]' : 'rounded-2xl p-2 sm:p-2.5 border-l-[5px]'),
                         'hover:shadow-lg hover:scale-[1.01] hover:z-20 cursor-pointer overflow-hidden flex flex-col justify-between select-none active:scale-[0.98]',
                         isInspected && 'ring-2 ring-indigo-500 shadow-apple-lg z-30',
                         isBeingMoved && 'opacity-25 border-dashed ring-2 ring-indigo-500/50 scale-[0.97]',
@@ -1266,15 +1265,15 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                       )}
                       title="Appui long pour déplacer cette activité sur l'emploi du temps"
                     >
-                      {/* Corps supérieur de l'événement */}
-                      <div className="min-w-0 pointer-events-none space-y-1">
-                        {/* En-tête : Badge matière & Alarme */}
-                        <div className="flex items-center justify-between gap-1 flex-wrap">
-                          {subjectLabel && (isNarrow ? height >= 140 : height >= 50) && (
+                      {/* Corps de l'événement (centré verticalement) */}
+                      <div className="min-w-0 pointer-events-none space-y-1 flex-1 flex flex-col justify-center">
+                        {/* En-tête : Badge matière */}
+                        {subjectLabel && (isNarrow ? height >= 140 : height >= 50) && (
+                          <div className="flex items-center mb-0.5">
                             <span
                               className={clsx(
                                 'font-black uppercase tracking-wider rounded truncate',
-                                isNarrow ? 'text-[8.5px] px-1 py-0.2 max-w-full' : 'text-[10px] px-2 py-0.5 max-w-[170px]'
+                                isNarrow ? 'text-[8.5px] px-1 py-0.5 max-w-full' : 'text-[10px] px-2 py-0.5 max-w-full'
                               )}
                               style={{
                                 backgroundColor: theme.badgeBg,
@@ -1283,14 +1282,8 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                             >
                               {subjectLabel}
                             </span>
-                          )}
-
-                          <div className="flex items-center gap-1 ml-auto">
-                            {event.alarms && event.alarms.length > 0 && (
-                              <Bell className={clsx(isNarrow ? 'w-3 h-3' : 'w-3.5 h-3.5', 'text-red-500 shrink-0')} />
-                            )}
                           </div>
-                        </div>
+                        )}
 
                         {/* Titre principal grand et ultra-lisible */}
                         <h4
@@ -1306,17 +1299,22 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                             color: theme.textColor,
                             display: '-webkit-box',
                             WebkitBoxOrient: 'vertical',
-                            WebkitLineClamp: maxTitleLines,
+                            WebkitLineClamp: Math.max(1, maxTitleLines),
                             overflow: 'hidden',
                             wordBreak: 'break-word',
                             overflowWrap: 'anywhere',
                           }}
                         >
                           {event.title}
+                          {height < 45 && (
+                            <span className="text-[9.5px] font-bold opacity-75 ml-1.5 inline-block">
+                              {format(parseISO(event.start_time), 'HH:mm')}
+                            </span>
+                          )}
                         </h4>
 
                         {/* Horaire et durée */}
-                        {height >= 38 && (
+                        {height >= 45 && (
                           isNarrow ? (
                             <div className="text-[9.5px] font-black text-slate-800 bg-white/80 px-1 py-0.5 rounded leading-none w-fit shadow-2xs mt-1">
                               <span>{format(parseISO(event.start_time), 'HH:mm')}</span>
@@ -1353,7 +1351,10 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                         onPointerDown={(e) => handleResizePointerDown(e, event)}
                         onPointerMove={handleResizePointerMove}
                         onPointerUp={handleResizePointerUp}
-                        className="touch-none w-full h-3.5 -mb-1 flex items-center justify-center cursor-ns-resize hover:bg-black/10 active:bg-black/20 rounded-b transition-colors group/resize"
+                        className={clsx(
+                          'touch-none w-full shrink-0 flex items-center justify-center cursor-ns-resize hover:bg-black/10 active:bg-black/20 rounded-b transition-colors group/resize',
+                          height < 45 ? 'h-2 -mb-0.5' : 'h-3.5 -mb-1'
+                        )}
                         title="Glissez avec le doigt ou Apple Pencil pour ajuster la durée"
                       >
                         <div className={clsx('h-1 rounded-full bg-slate-400/50 group-hover/resize:bg-indigo-600 transition-all', isNarrow ? 'w-5' : 'w-8 group-hover/resize:w-12')} />

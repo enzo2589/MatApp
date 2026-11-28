@@ -17,7 +17,7 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { clsx } from 'clsx';
-import { Bell, Palette, ArrowRight, Sparkles } from 'lucide-react';
+import { Palette, ArrowRight, Sparkles } from 'lucide-react';
 import { getDayHighlights, subscribePreferences } from '../../services/studentPreferences';
 import { DayColorPickerModal } from './DayColorPickerModal';
 
@@ -275,9 +275,6 @@ export const MonthGrid: React.FC<MonthGridProps> = ({
                               <span className="truncate">{event.title}</span>
                             </span>
 
-                            {event.alarms && event.alarms.length > 0 && (
-                              <Bell className="w-2.5 h-2.5 text-red-500 shrink-0" />
-                            )}
                           </div>
                         );
                       })}
